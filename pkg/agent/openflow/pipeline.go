@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 
+	"k8s.io/client-go/tools/cache"
+
 	"github.com/vmware-tanzu/antrea/pkg/agent/config"
 	"github.com/vmware-tanzu/antrea/pkg/agent/openflow/cookie"
 	"github.com/vmware-tanzu/antrea/pkg/agent/types"
@@ -35,10 +37,12 @@ const (
 	conntrackTable        binding.TableIDType = 30
 	conntrackStateTable   binding.TableIDType = 31
 	dnatTable             binding.TableIDType = 40
+	cnpEgressRuleTable    binding.TableIDType = 45
 	egressRuleTable       binding.TableIDType = 50
 	egressDefaultTable    binding.TableIDType = 60
 	l3ForwardingTable     binding.TableIDType = 70
 	l2ForwardingCalcTable binding.TableIDType = 80
+	cnpIngressRuleTable   binding.TableIDType = 85
 	ingressRuleTable      binding.TableIDType = 90
 	ingressDefaultTable   binding.TableIDType = 100
 	conntrackCommitTable  binding.TableIDType = 105
@@ -50,6 +54,10 @@ const (
 	priorityLow    = uint16(190)
 	prioritySNAT   = uint16(180)
 	priorityMiss   = uint16(0)
+	priorityTopCNP = uint16(64990)
+
+	// Index for priority cache
+	priorityIndex = "priority"
 
 	// Traffic marks
 	markTrafficFromTunnel  = 0
@@ -69,10 +77,12 @@ var (
 		{conntrackTable, "ConntrackZone"},
 		{conntrackStateTable, "ContrackState"},
 		{dnatTable, "DNAT"},
+		{cnpEgressRuleTable, "CNPEgressRule"},
 		{egressRuleTable, "EgressRule"},
 		{egressDefaultTable, "EgressDefaultRule"},
 		{l3ForwardingTable, "L3Forwarding"},
 		{l2ForwardingCalcTable, "L2Forwarding"},
+		{cnpIngressRuleTable, "CNPIngressRule"},
 		{ingressRuleTable, "IngressRule"},
 		{ingressDefaultTable, "IngressDefaultRule"},
 		{conntrackCommitTable, "ConntrackCommit"},
@@ -175,9 +185,9 @@ type client struct {
 	// ofEntryOperations is a wrapper interface for OpenFlow entry Add / Modify / Delete operations. It
 	// enables convenient mocking in unit tests.
 	ofEntryOperations OFEntryOperations
-	// policyCache is a map from PolicyRule ID to policyRuleConjunction. It's guaranteed that one policyRuleConjunction
-	// is processed by at most one goroutine at any given time.
-	policyCache       sync.Map
+	// policyCache is a  a storage that supports listing policyRuleConjunction with different indexers.
+	// It's guaranteed that one policyRuleConjunction is processed by at most one goroutine at any given time.
+	policyCache       cache.Indexer
 	conjMatchFlowLock sync.Mutex // Lock for access globalConjMatchFlowCache
 	// globalConjMatchFlowCache is a global map for conjMatchFlowContext. The key is a string generated from the
 	// conjMatchFlowContext.
@@ -603,11 +613,29 @@ func (c *client) arpNormalFlow(category cookie.Category) binding.Flow {
 }
 
 // conjunctionActionFlow generates the flow to jump to a specific table if policyRuleConjunction ID is matched. Priority of
-// conjunctionActionFlow is priorityLow.
-func (c *client) conjunctionActionFlow(conjunctionID uint32, tableID binding.TableIDType, nextTable binding.TableIDType) binding.Flow {
-	return c.pipeline[tableID].BuildFlow(priorityLow).MatchProtocol(binding.ProtocolIP).
+// conjunctionActionFlow is priorityLow for k8s network policies, and *priority assigned by PriorityAssigner for CNP.
+func (c *client) conjunctionActionFlow(conjunctionID uint32, tableID binding.TableIDType, nextTable binding.TableIDType, priority *uint16) binding.Flow {
+	var ofPriority uint16
+	if priority == nil {
+		ofPriority = priorityLow
+	} else {
+		ofPriority = *priority
+	}
+	return c.pipeline[tableID].BuildFlow(ofPriority).MatchProtocol(binding.ProtocolIP).
 		MatchConjID(conjunctionID).
+		MatchPriority(ofPriority).
 		Action().GotoTable(nextTable).
+		Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
+		Done()
+}
+
+// conjunctionActionFlow generates the flow to drop traffic if policyRuleConjunction ID is matched.
+func (c *client) conjunctionActionDropFlow(conjunctionID uint32, tableID binding.TableIDType, priority *uint16) binding.Flow {
+	ofPriority := *priority
+	return c.pipeline[tableID].BuildFlow(ofPriority).MatchProtocol(binding.ProtocolIP).
+		MatchConjID(conjunctionID).
+		MatchPriority(ofPriority).
+		Action().Drop().
 		Cookie(c.cookieAllocator.Request(cookie.Policy).Raw()).
 		Done()
 }
@@ -631,6 +659,11 @@ func (c *client) establishedConnectionFlows(category cookie.Category) (flows []b
 		Action().GotoTable(egressDropTable.GetNext()).
 		Cookie(c.cookieAllocator.Request(category).Raw()).
 		Done()
+	cnpEgressEstFlow := c.pipeline[cnpEgressRuleTable].BuildFlow(priorityTopCNP).MatchProtocol(binding.ProtocolIP).
+		MatchCTStateNew(false).MatchCTStateEst(true).
+		Action().GotoTable(egressDropTable.GetNext()).
+		Cookie(c.cookieAllocator.Request(category).Raw()).
+		Done()
 	// ingressDropTable checks the destination address of packets, and drops packets sent to the AppliedToGroup but not
 	// matching the NetworkPolicy rules. Packets in the established connections need not to be checked with the
 	// ingressRuleTable or ingressDropTable.
@@ -640,7 +673,12 @@ func (c *client) establishedConnectionFlows(category cookie.Category) (flows []b
 		Action().GotoTable(ingressDropTable.GetNext()).
 		Cookie(c.cookieAllocator.Request(category).Raw()).
 		Done()
-	return []binding.Flow{egressEstFlow, ingressEstFlow}
+	cnpIngressEstFlow := c.pipeline[cnpIngressRuleTable].BuildFlow(priorityTopCNP).MatchProtocol(binding.ProtocolIP).
+		MatchCTStateNew(false).MatchCTStateEst(true).
+		Action().GotoTable(ingressDropTable.GetNext()).
+		Cookie(c.cookieAllocator.Request(category).Raw()).
+		Done()
+	return []binding.Flow{egressEstFlow, ingressEstFlow, cnpEgressEstFlow, cnpIngressEstFlow}
 }
 
 func (c *client) addFlowMatch(fb binding.FlowBuilder, matchType int, matchValue interface{}) binding.FlowBuilder {
@@ -680,7 +718,13 @@ func (c *client) conjunctionExceptionFlow(conjunctionID uint32, tableID binding.
 
 // conjunctiveMatchFlow generates the flow to set conjunctive actions if the match condition is matched.
 func (c *client) conjunctiveMatchFlow(tableID binding.TableIDType, matchKey int, matchValue interface{}, actions ...*conjunctiveAction) binding.Flow {
-	fb := c.pipeline[tableID].BuildFlow(priorityNormal)
+	var ofPriority uint16
+	if tableID == cnpEgressRuleTable || tableID == cnpIngressRuleTable {
+		ofPriority = priorityTopCNP
+	} else {
+		ofPriority = priorityNormal
+	}
+	fb := c.pipeline[tableID].BuildFlow(ofPriority)
 	fb = c.addFlowMatch(fb, matchKey, matchValue)
 	for _, act := range actions {
 		fb.Action().Conjunction(act.conjID, act.clauseID, act.nClause)
@@ -825,9 +869,26 @@ func (c *client) l3ToExternalFlows(nodeIP net.IP, localSubnet net.IPNet, outputP
 	return flows
 }
 
+// policyConjKeyFuncKeyFunc knows how to get key of a *policyRuleConjunction.
+func policyConjKeyFunc(obj interface{}) (string, error) {
+	conj := obj.(*policyRuleConjunction)
+	return string(conj.id), nil
+}
+
+// priorityIndexFunc knows how to get priority of actionFlows in a *policyRuleConjunction.
+// It's provided to cache.Indexer to build an index of policyRuleConjunction.
+func priorityIndexFunc(obj interface{}) ([]string, error) {
+	conj := obj.(*policyRuleConjunction)
+	return conj.ActionFlowPriorities(), nil
+}
+
 // NewClient is the constructor of the Client interface.
 func NewClient(bridgeName, mgmtAddr string) Client {
 	bridge := binding.NewOFBridge(bridgeName, mgmtAddr)
+	policyCache := cache.NewIndexer(
+		policyConjKeyFunc,
+		cache.Indexers{priorityIndex: priorityIndexFunc},
+	)
 	c := &client{
 		bridge: bridge,
 		pipeline: map[binding.TableIDType]binding.Table{
@@ -835,12 +896,14 @@ func NewClient(bridgeName, mgmtAddr string) Client {
 			spoofGuardTable:       bridge.CreateTable(spoofGuardTable, conntrackTable, binding.TableMissActionDrop),
 			conntrackTable:        bridge.CreateTable(conntrackTable, conntrackStateTable, binding.TableMissActionNone),
 			conntrackStateTable:   bridge.CreateTable(conntrackStateTable, dnatTable, binding.TableMissActionNext),
-			dnatTable:             bridge.CreateTable(dnatTable, egressRuleTable, binding.TableMissActionNext),
+			dnatTable:             bridge.CreateTable(dnatTable, cnpEgressRuleTable, binding.TableMissActionNext),
+			cnpEgressRuleTable:    bridge.CreateTable(cnpEgressRuleTable, egressRuleTable, binding.TableMissActionNext),
 			egressRuleTable:       bridge.CreateTable(egressRuleTable, egressDefaultTable, binding.TableMissActionNext),
 			egressDefaultTable:    bridge.CreateTable(egressDefaultTable, l3ForwardingTable, binding.TableMissActionNext),
 			l3ForwardingTable:     bridge.CreateTable(l3ForwardingTable, l2ForwardingCalcTable, binding.TableMissActionNext),
-			l2ForwardingCalcTable: bridge.CreateTable(l2ForwardingCalcTable, ingressRuleTable, binding.TableMissActionNext),
+			l2ForwardingCalcTable: bridge.CreateTable(l2ForwardingCalcTable, cnpIngressRuleTable, binding.TableMissActionNext),
 			arpResponderTable:     bridge.CreateTable(arpResponderTable, binding.LastTableID, binding.TableMissActionDrop),
+			cnpIngressRuleTable:   bridge.CreateTable(cnpIngressRuleTable, ingressRuleTable, binding.TableMissActionNext),
 			ingressRuleTable:      bridge.CreateTable(ingressRuleTable, ingressDefaultTable, binding.TableMissActionNext),
 			ingressDefaultTable:   bridge.CreateTable(ingressDefaultTable, conntrackCommitTable, binding.TableMissActionNext),
 			conntrackCommitTable:  bridge.CreateTable(conntrackCommitTable, l2ForwardingOutTable, binding.TableMissActionNext),
@@ -848,7 +911,7 @@ func NewClient(bridgeName, mgmtAddr string) Client {
 		},
 		nodeFlowCache:            newFlowCategoryCache(),
 		podFlowCache:             newFlowCategoryCache(),
-		policyCache:              sync.Map{},
+		policyCache:              policyCache,
 		globalConjMatchFlowCache: map[string]*conjMatchFlowContext{},
 	}
 	c.ofEntryOperations = c
