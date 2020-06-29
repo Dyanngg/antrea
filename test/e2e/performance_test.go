@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	secv1alpha1 "github.com/vmware-tanzu/antrea/pkg/apis/security/v1alpha1"
+	secClient "github.com/vmware-tanzu/antrea/pkg/client/clientset/versioned/typed/security/v1alpha1"
 )
 
 const (
@@ -36,6 +40,7 @@ const (
 	perfTestAppLabel                       = "antrea-perf-test"
 	podsConnectionNetworkPolicyName        = "pods.ingress"
 	workloadNetworkPolicyName              = "workloads.ingress"
+	workloadCNPName                        = "cnp.ingress"
 	perftoolImage                          = "antrea/perftool"
 	nginxImage                             = "nginx"
 	perftoolContainerName                  = "perftool"
@@ -79,6 +84,14 @@ func BenchmarkRealizeNetworkPolicy(b *testing.B) {
 	for _, policyRules := range []int{5000, 10000, 15000} {
 		b.Run(fmt.Sprintf("RealizeNetworkPolicy%d", policyRules), func(b *testing.B) {
 			withPerfTestSetup(func(data *TestData) { networkPolicyRealize(policyRules, data, b) }, b)
+		})
+	}
+}
+
+func BenchmarkRealizeCNP(b *testing.B) {
+	for _, numCNP := range []int{1, 10, 50} {
+		b.Run(fmt.Sprintf("RealizeNetworkPolicy%d", 100*numCNP), func(b *testing.B) {
+			withPerfTestSetup(func(data *TestData) { cnpRealize(100, numCNP, data, b) }, b)
 		})
 	}
 }
@@ -176,6 +189,61 @@ func populateWorkloadNetworkPolicy(np *networkv1.NetworkPolicy, data *TestData) 
 	return err
 }
 
+func generateWorkloadCNPs(policyRules, numCNPs int) []*secv1alpha1.ClusterNetworkPolicy {
+	cnps := make([]*secv1alpha1.ClusterNetworkPolicy, numCNPs)
+	ingressRules := make([]secv1alpha1.NetworkPolicyPeer, policyRules*numCNPs)
+	rndSrc := rand.NewSource(seed)
+	existingCIDRs := make(map[string]struct{}) // ensure no duplicated cidrs
+	for i := 0; i < policyRules*numCNPs; i++ {
+		cidr := randCidr(rndSrc)
+		for _, ok := existingCIDRs[cidr]; ok; {
+			cidr = randCidr(rndSrc)
+		}
+		existingCIDRs[cidr] = struct{}{}
+		ingressRules[i] = secv1alpha1.NetworkPolicyPeer{IPBlock: &secv1alpha1.IPBlock{CIDR: cidr}}
+	}
+	for i := 0; i < numCNPs; i++ {
+		ruleAction := secv1alpha1.RuleActionAllow
+		cnpSpec := secv1alpha1.ClusterNetworkPolicySpec{
+			Priority:  float64(i + 1),
+			AppliedTo: []secv1alpha1.NetworkPolicyPeer{{PodSelector: labelSelector}},
+			Ingress: []secv1alpha1.Rule{{
+				Action: &ruleAction,
+				From:   ingressRules[policyRules*i : policyRules*(i+1)],
+				Ports:  []secv1alpha1.NetworkPolicyPort{},
+			}},
+			Egress: []secv1alpha1.Rule{},
+		}
+		cnps[i] = &secv1alpha1.ClusterNetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: workloadCNPName + strconv.Itoa(i)},
+			Spec:       cnpSpec,
+		}
+	}
+	return cnps
+}
+
+func populateCNPs(cnps []*secv1alpha1.ClusterNetworkPolicy, data *TestData) error {
+	for _, cnp := range cnps {
+		securityClient := data.securityClient.(*secClient.SecurityV1alpha1Client)
+		_, err := securityClient.ClusterNetworkPolicies().Create(context.TODO(), cnp, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cleanupCNPs(numCNPs int, data *TestData) error {
+	for i := 0; i < numCNPs; i++ {
+		cnpName := workloadCNPName + strconv.Itoa(i)
+		securityClient := data.securityClient.(*secClient.SecurityV1alpha1Client)
+		if err := securityClient.ClusterNetworkPolicies().Delete(context.TODO(), cnpName, metav1.DeleteOptions{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func setupTestPods(data *TestData, b *testing.B) (nginxPodIP, perfPodIP string) {
 	b.Logf("Creating a nginx test Pod")
 	nginxPod := createPerfTestPodDefinition(benchNginxPodName, nginxContainerName, nginxImage)
@@ -270,31 +338,74 @@ func networkPolicyRealize(policyRules int, data *TestData, b *testing.B) {
 	}
 }
 
+// cnpRealize runs a benchmark to measure how long it takes for <numCNPs> CNPs each with <policyRules> CIDR rules
+// to be realized as OVS flows. In order to have entities for the Network Policy to be applied to, we create two dummy
+// Pods with the "antrea-perf-test" app label, but they do not generate any traffic.
+func cnpRealize(policyRules, numCNPs int, data *TestData, b *testing.B) {
+	setupTestPods(data, b)
+	for i := 0; i < b.N; i++ {
+		cnps := generateWorkloadCNPs(policyRules, numCNPs)
+		go func() {
+			err := populateCNPs(cnps, data)
+			if err != nil {
+				b.Fatalf("Error when populating workload cnp: %v", err)
+			}
+		}()
+
+		b.Log("Waiting for cnps to be realized")
+		b.StartTimer()
+		err := waitCNPRealize(policyRules, numCNPs, data)
+		if err != nil {
+			b.Fatalf("Checking network policies realization failed: %v", err)
+		}
+		b.StopTimer()
+		b.Log("All cnps have been realized")
+
+		err = cleanupCNPs(numCNPs, data)
+		if err != nil {
+			b.Fatalf("Error when cleaning up CNPs after running one bench iteration: %v", err)
+		}
+	}
+}
+
 func waitNetworkPolicyRealize(policyRules int, data *TestData) error {
 	return wait.PollImmediate(50*time.Millisecond, *realizeTimeout, func() (bool, error) {
-		return checkRealize(policyRules, data)
+		return checkRealize(policyRules+2, 90, data)
 	})
 }
 
-// checkRealize checks if all CIDR rules in the Network Policy have been realized as OVS flows. It counts the number of
+// For CNP, the two match flows created for the two pods with perfTestAppLabel need to be created at
+// each ofPriority corresponded to CNP priority. Each CNP also leads to <policyRules> flows for the
+// CIDR rules. Hence we verify if numCNPs * (2 + policyRules) are realized on table 85.
+func waitCNPRealize(policyRules, numCNPs int, data *TestData) error {
+	expectedNumFlows := numCNPs * (2 + policyRules)
+	return wait.PollImmediate(50*time.Millisecond, *realizeTimeout, func() (bool, error) {
+		return checkRealize(expectedNumFlows, 85, data)
+	})
+}
+
+// checkRealize checks if all CIDR rules in the NetworkPolicy have been realized as OVS flows. It counts the number of
 // flows installed in the ingressRuleTable of the OVS bridge of the master Node. This relies on the implementation
-// knowledge that given a single ingress policy, the Antrea agent will install exactly one flow per CIDR rule in table 90.
+// knowledge that given a single ingress policy, the Antrea agent will install exactly one flow per CIDR rule in table 90
+// or 85, depending on if the policy is k8s NetworkPolicy or ClusterNetworkPolicy.
 // checkRealize returns true when the number of flows exceeds the number of CIDR, because each table has a default flow
 // entry which is used for default matching.
 // Since the check is done over SSH, the time measurement is not completely accurate.
-func checkRealize(policyRules int, data *TestData) (bool, error) {
+func checkRealize(expectedFlowCount, tableNum int, data *TestData) (bool, error) {
 	antreaPodName, err := data.getAntreaPodOnNode(masterNodeName())
 	if err != nil {
 		return false, err
 	}
 	// table 90 is the ingressRuleTable where the rules in workload network policy is being applied to.
-	cmd := []string{"ovs-ofctl", "dump-flows", defaultBridgeName, "table=90"}
+	// table 85 is the ingressRuleTable where the rules in workload CNP is being applied to.
+	tableStr := fmt.Sprintf("table=%s", strconv.Itoa(tableNum))
+	cmd := []string{"ovs-ofctl", "dump-flows", defaultBridgeName, tableStr}
 	stdout, _, err := data.runCommandFromPod(antreaNamespace, antreaPodName, "antrea-agent", cmd)
 	if err != nil {
 		return false, err
 	}
 	flowNums := strings.Count(stdout, "\n")
-	return flowNums > policyRules, nil
+	return flowNums > expectedFlowCount, nil
 }
 
 // withPerfTestSetup runs function fn in a clean test environment.
