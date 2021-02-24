@@ -1772,15 +1772,12 @@ func testACNPClusterGroupServiceRefCreateAndUpdate(t *testing.T, data *TestData)
 
 	cg1Name, cg2Name := "cg-svc1", "cg-svc2"
 	cgBuilder1 := &ClusterGroupSpecBuilder{}
-	cgBuilder1 = cgBuilder1.SetName(cg1Name)
-	cgBuilder1 = cgBuilder1.SetServiceReference("x", "svc1")
+	cgBuilder1 = cgBuilder1.SetName(cg1Name).SetServiceReference("x", "svc1")
 	cgBuilder2 := &ClusterGroupSpecBuilder{}
-	cgBuilder2 = cgBuilder2.SetName(cg2Name)
-	cgBuilder2 = cgBuilder2.SetServiceReference("y", "svc2")
+	cgBuilder2 = cgBuilder2.SetName(cg2Name).SetServiceReference("y", "svc2")
 
 	builder := &ClusterNetworkPolicySpecBuilder{}
-	builder = builder.SetName("cnp-cg-svc-ref").SetPriority(1.0)
-	builder.SetAppliedToGroup([]ACNPAppliedToSpec{{Group: cg1Name}})
+	builder = builder.SetName("cnp-cg-svc-ref").SetPriority(1.0).SetAppliedToGroup([]ACNPAppliedToSpec{{Group: cg1Name}})
 	builder.AddIngress(v1.ProtocolTCP, &p80, nil, nil, nil, nil, nil, nil, nil,
 		nil, secv1alpha1.RuleActionDrop, cg2Name, "")
 

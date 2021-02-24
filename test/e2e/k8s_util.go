@@ -100,19 +100,19 @@ func (k *KubernetesUtils) Probe(ns1, pod1, ns2, pod2 string, port int32, usePodN
 	} else {
 		fromPods, err := k.GetPods(ns1, "pod", pod1)
 		if err != nil {
-			return false, errors.WithMessagef(err, "unable to get pods from ns %s", ns1)
+			return false, fmt.Errorf("unable to get pods from ns %s: %v", ns1, err)
 		}
 		if len(fromPods) == 0 {
-			return false, errors.New(fmt.Sprintf("no Pod of label pod=%s in namespace %s found", pod1, ns1))
+			return false, fmt.Errorf("no Pod of label pod=%s in namespace %s found", pod1, ns1)
 		}
 		fromPod = fromPods[0]
 
 		toPods, err := k.GetPods(ns2, "pod", pod2)
 		if err != nil {
-			return false, errors.WithMessagef(err, "unable to get pods from ns %s", ns2)
+			return false, fmt.Errorf("unable to get pods from ns %s: %v", ns2, err)
 		}
 		if len(toPods) == 0 {
-			return false, errors.New(fmt.Sprintf("no Pod of label pod=%s in namespace %s found", pod2, ns2))
+			return false, fmt.Errorf("no Pod of label pod=%s in namespace %s found", pod2, ns2)
 		}
 		toPod = toPods[0]
 	}
