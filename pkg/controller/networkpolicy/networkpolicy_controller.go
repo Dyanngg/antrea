@@ -644,6 +644,10 @@ func (n *NetworkPolicyController) filterAppliedToGroupsForPodOrExternalEntity(ob
 // affected GroupMembers are calculated during sync process.
 func (n *NetworkPolicyController) createAddressGroup(peer networkingv1.NetworkPolicyPeer, np *networkingv1.NetworkPolicy) string {
 	groupSelector := toGroupSelector(np.ObjectMeta.Namespace, peer.PodSelector, peer.NamespaceSelector, nil)
+	return n.createAddressGroupForGroupSelector(groupSelector)
+}
+
+func (n *NetworkPolicyController) createAddressGroupForGroupSelector(groupSelector *antreatypes.GroupSelector) string {
 	normalizedUID := getNormalizedUID(groupSelector.NormalizedName)
 	// Get or create an AddressGroup for the generated UID.
 	_, found, _ := n.addressGroupStore.Get(normalizedUID)

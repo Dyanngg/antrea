@@ -17,8 +17,8 @@ package networkpolicy
 import (
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog"
 
@@ -117,6 +117,24 @@ func (n *NetworkPolicyController) toAntreaPeerForCRD(peers []secv1alpha1.Network
 	return &controlplane.NetworkPolicyPeer{AddressGroups: addressGroups, IPBlocks: ipBlocks}
 }
 
+func (n *NetworkPolicyController) toAntreaPeerForServiceEndpointSubset(endpointSubset corev1.EndpointSubset, np metav1.Object) *controlplane.NetworkPolicyPeer {
+	var ipBlocks []controlplane.IPBlock
+	for _, addr := range endpointSubset.Addresses {
+		// TODO: IPv6? Hostname?
+		ipNet, err := cidrStrToIPNet(addr.IP + "/32")
+		if err != nil {
+			klog.Errorf("Failure processing Antrea NetworkPolicy %s/%s toService: %v", np.GetNamespace(), np.GetName(), err)
+			continue
+		}
+		antreaIPBlockForEndpoint := controlplane.IPBlock{
+			CIDR: *ipNet,
+			Except: []controlplane.IPNet{},
+		}
+		ipBlocks = append(ipBlocks, antreaIPBlockForEndpoint)
+	}
+	return &controlplane.NetworkPolicyPeer{IPBlocks: ipBlocks}
+}
+
 // createAppliedToGroupForClusterGroupCRD creates an AppliedToGroup object corresponding to a
 // internal Group. If the AppliedToGroup already exists, it returns the key
 // otherwise it copies the internal Group contents to an AppliedToGroup resource and returns
@@ -148,21 +166,12 @@ func (n *NetworkPolicyController) createAppliedToGroupForClusterGroupCRD(intGrp 
 // PodAddresses as the affected Pods are calculated during sync process.
 func (n *NetworkPolicyController) createAddressGroupForCRD(peer secv1alpha1.NetworkPolicyPeer, np metav1.Object) string {
 	groupSelector := toGroupSelector(np.GetNamespace(), peer.PodSelector, peer.NamespaceSelector, peer.ExternalEntitySelector)
-	normalizedUID := getNormalizedUID(groupSelector.NormalizedName)
-	// Get or create an AddressGroup for the generated UID.
-	_, found, _ := n.addressGroupStore.Get(normalizedUID)
-	if found {
-		return normalizedUID
-	}
-	// Create an AddressGroup object per Peer object.
-	addressGroup := &antreatypes.AddressGroup{
-		UID:      types.UID(normalizedUID),
-		Name:     normalizedUID,
-		Selector: *groupSelector,
-	}
-	klog.V(2).Infof("Creating new AddressGroup %s with selector (%s)", addressGroup.Name, addressGroup.Selector.NormalizedName)
-	n.addressGroupStore.Create(addressGroup)
-	return normalizedUID
+	return n.createAddressGroupForGroupSelector(groupSelector)
+}
+
+func (n *NetworkPolicyController) createAddressGroupForService(ns string, podSelector *metav1.LabelSelector) string {
+	groupSelector := toGroupSelector(ns, podSelector, nil, nil)
+	return n.createAddressGroupForGroupSelector(groupSelector)
 }
 
 // createAddressGroupForClusterGroupCRD creates an AddressGroup object corresponding to a
