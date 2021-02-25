@@ -72,13 +72,16 @@ type TestCase struct {
 	Steps []*TestStep
 }
 
-// TestStep is a single unit of testing spec. It includes the policy specs that need to be
-// applied for this test, the port to test traffic on and the expected Reachability matrix.
+// TestStep is a single unit of testing spec. It includes the policy, group and service
+// specs that need to be applied for this test, the port to test traffic on and the expected
+// Reachability matrix. Note that in a TestCase, TestSteps are incremental, so for each
+// TestStep only resources that needs to be newly created/updated for this step needs to
+// be present in the TestResources slice. All resources created will be cleaned up when the
+// entire TestCase is executed.
 type TestStep struct {
 	Name              string
 	Reachability      *Reachability
-	Policies          []metav1.Object
-	ServicesAndGroups []metav1.Object
+	TestResources     []metav1.Object
 	Port              []int32
 	Duration          time.Duration
 	CustomProbes      []*CustomProbe
@@ -660,7 +663,6 @@ func testACNPAllowXBtoA(t *testing.T) {
 			"Port 80",
 			reachability,
 			[]metav1.Object{builder.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -692,7 +694,6 @@ func testACNPAllowXBtoYA(t *testing.T) {
 			"NamedPort 81",
 			reachability,
 			[]metav1.Object{builder.Get()},
-			nil,
 			[]int32{81},
 			0,
 			nil,
@@ -737,7 +738,6 @@ func testACNPPriorityOverrideDefaultDeny(t *testing.T) {
 			"Both ACNP",
 			reachabilityBothACNP,
 			[]metav1.Object{builder1.Get(), builder2.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -749,7 +749,7 @@ func testACNPPriorityOverrideDefaultDeny(t *testing.T) {
 	executeTests(t, testCase)
 }
 
-// testACNPAllowNoDefaultIsolation tests that no default isolation rules are created for Policies.
+// testACNPAllowNoDefaultIsolation tests that no default isolation rules are created for TestResources.
 func testACNPAllowNoDefaultIsolation(t *testing.T) {
 	builder := &ClusterNetworkPolicySpecBuilder{}
 	builder = builder.SetName("acnp-allow-x-ingress-y-egress-z").
@@ -766,7 +766,6 @@ func testACNPAllowNoDefaultIsolation(t *testing.T) {
 			"Port 81",
 			reachability,
 			[]metav1.Object{builder.Get()},
-			nil,
 			[]int32{81},
 			0,
 			nil,
@@ -802,7 +801,6 @@ func testACNPDropEgress(t *testing.T) {
 			"Port 80",
 			reachability,
 			[]metav1.Object{builder.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -837,8 +835,7 @@ func testACNPAppliedToDenyXBtoCGWithYA(t *testing.T) {
 		{
 			"NamedPort 81",
 			reachability,
-			[]metav1.Object{builder.Get()},
-			[]metav1.Object{cgBuilder.Get()},
+			[]metav1.Object{cgBuilder.Get(), builder.Get()},
 			[]int32{81},
 			0,
 			nil,
@@ -873,8 +870,7 @@ func testACNPIngressRuleDenyCGWithXBtoYA(t *testing.T) {
 		{
 			"NamedPort 81",
 			reachability,
-			[]metav1.Object{builder.Get()},
-			[]metav1.Object{cgBuilder.Get()},
+			[]metav1.Object{cgBuilder.Get(), builder.Get()},
 			[]int32{81},
 			0,
 			nil,
@@ -912,8 +908,7 @@ func testACNPAppliedToRuleCGWithPodsAToNsZ(t *testing.T) {
 		{
 			"Port 80",
 			reachability,
-			[]metav1.Object{builder.Get()},
-			[]metav1.Object{cgBuilder.Get()},
+			[]metav1.Object{cgBuilder.Get(), builder.Get()},
 			[]int32{80},
 			0,
 			nil,
@@ -952,8 +947,7 @@ func testACNPEgressRulePodsAToCGWithNsZ(t *testing.T) {
 		{
 			"Port 80",
 			reachability,
-			[]metav1.Object{builder.Get()},
-			[]metav1.Object{cgBuilder.Get()},
+			[]metav1.Object{cgBuilder.Get(), builder.Get()},
 			[]int32{80},
 			0,
 			nil,
@@ -1004,8 +998,7 @@ func testACNPClusterGroupUpdateAppliedTo(t *testing.T) {
 		{
 			"CG Pods A",
 			reachability,
-			[]metav1.Object{builder.Get()},
-			[]metav1.Object{cgBuilder.Get()},
+			[]metav1.Object{cgBuilder.Get(), builder.Get()},
 			[]int32{80},
 			0,
 			nil,
@@ -1013,7 +1006,6 @@ func testACNPClusterGroupUpdateAppliedTo(t *testing.T) {
 		{
 			"CG Pods C - update",
 			updatedReachability,
-			[]metav1.Object{builder.Get()},
 			[]metav1.Object{updatedCgBuilder.Get()},
 			[]int32{80},
 			0,
@@ -1065,8 +1057,7 @@ func testACNPClusterGroupUpdate(t *testing.T) {
 		{
 			"Port 80",
 			reachability,
-			[]metav1.Object{builder.Get()},
-			[]metav1.Object{cgBuilder.Get()},
+			[]metav1.Object{cgBuilder.Get(), builder.Get()},
 			[]int32{80},
 			0,
 			nil,
@@ -1074,7 +1065,6 @@ func testACNPClusterGroupUpdate(t *testing.T) {
 		{
 			"Port 80 - update",
 			updatedReachability,
-			[]metav1.Object{builder.Get()},
 			[]metav1.Object{updatedCgBuilder.Get()},
 			[]int32{80},
 			0,
@@ -1117,8 +1107,7 @@ func testACNPClusterGroupAppliedToPodAdd(t *testing.T, data *TestData) {
 		{
 			"Port 80",
 			nil,
-			[]metav1.Object{builder.Get()},
-			[]metav1.Object{cgBuilder.Get()},
+			[]metav1.Object{cgBuilder.Get(), builder.Get()},
 			[]int32{80},
 			0,
 			cp,
@@ -1161,8 +1150,7 @@ func testACNPClusterGroupRefRulePodAdd(t *testing.T, data *TestData) {
 		{
 			"Port 80",
 			nil,
-			[]metav1.Object{builder.Get()},
-			[]metav1.Object{cgBuilder.Get()},
+			[]metav1.Object{cgBuilder.Get(), builder.Get()},
 			[]int32{80},
 			0,
 			cp,
@@ -1223,7 +1211,6 @@ func testBaselineNamespaceIsolation(t *testing.T) {
 			"Port 80",
 			reachability,
 			[]metav1.Object{builder.Get(), k8sNPBuilder.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1238,7 +1225,7 @@ func testBaselineNamespaceIsolation(t *testing.T) {
 	time.Sleep(networkPolicyDelay)
 }
 
-// testACNPPriorityOverride tests priority overriding in three Policies. Those three Policies are applied in a specific order to
+// testACNPPriorityOverride tests priority overriding in three TestResources. Those three TestResources are applied in a specific order to
 // test priority reassignment, and each controls a smaller set of traffic patterns as priority increases.
 func testACNPPriorityOverride(t *testing.T) {
 	builder1 := &ClusterNetworkPolicySpecBuilder{}
@@ -1286,22 +1273,20 @@ func testACNPPriorityOverride(t *testing.T) {
 
 	testStepTwoACNP := []*TestStep{
 		{
-			"Two Policies with different priorities",
+			"Two TestResources with different priorities",
 			reachabilityTwoACNPs,
 			[]metav1.Object{builder3.Get(), builder2.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
 		},
 	}
-	// Create the Policies in specific order to make sure that priority re-assignments work as expected.
+	// Create the TestResources in specific order to make sure that priority re-assignments work as expected.
 	testStepAll := []*TestStep{
 		{
-			"All three Policies",
+			"All three TestResources",
 			reachabilityAllACNPs,
 			[]metav1.Object{builder3.Get(), builder1.Get(), builder2.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1314,7 +1299,7 @@ func testACNPPriorityOverride(t *testing.T) {
 	executeTests(t, testCase)
 }
 
-// testACNPTierOverride tests tier priority overriding in three Policies.
+// testACNPTierOverride tests tier priority overriding in three TestResources.
 // Each ACNP controls a smaller set of traffic patterns as tier priority increases.
 func testACNPTierOverride(t *testing.T) {
 	builder1 := &ClusterNetworkPolicySpecBuilder{}
@@ -1365,10 +1350,9 @@ func testACNPTierOverride(t *testing.T) {
 
 	testStepTwoACNP := []*TestStep{
 		{
-			"Two Policies in different tiers",
+			"Two TestResources in different tiers",
 			reachabilityTwoACNPs,
 			[]metav1.Object{builder3.Get(), builder2.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1376,10 +1360,9 @@ func testACNPTierOverride(t *testing.T) {
 	}
 	testStepAll := []*TestStep{
 		{
-			"All three Policies in different tiers",
+			"All three TestResources in different tiers",
 			reachabilityAllACNPs,
 			[]metav1.Object{builder3.Get(), builder1.Get(), builder2.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1392,7 +1375,7 @@ func testACNPTierOverride(t *testing.T) {
 	executeTests(t, testCase)
 }
 
-// testACNPTierOverride tests tier priority overriding in three Policies with custom created tiers.
+// testACNPTierOverride tests tier priority overriding in three TestResources with custom created tiers.
 // Each ACNP controls a smaller set of traffic patterns as tier priority increases.
 func testACNPCustomTiers(t *testing.T) {
 	// Create two custom tiers with tier priority immediately next to each other.
@@ -1428,10 +1411,9 @@ func testACNPCustomTiers(t *testing.T) {
 	reachabilityTwoACNPs.Expect(Pod("z/c"), Pod("x/c"), false)
 	testStepTwoACNP := []*TestStep{
 		{
-			"Two Policies in different tiers",
+			"Two TestResources in different tiers",
 			reachabilityTwoACNPs,
 			[]metav1.Object{builder2.Get(), builder1.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1448,7 +1430,7 @@ func testACNPCustomTiers(t *testing.T) {
 	failOnError(k8sUtils.DeleteTier("low-priority"), t)
 }
 
-// testACNPPriorityConflictingRule tests that if there are two Policies in the cluster with rules that conflicts with
+// testACNPPriorityConflictingRule tests that if there are two TestResources in the cluster with rules that conflicts with
 // each other, the ACNP with higher priority will prevail.
 func testACNPPriorityConflictingRule(t *testing.T) {
 	builder1 := &ClusterNetworkPolicySpecBuilder{}
@@ -1483,7 +1465,6 @@ func testACNPPriorityConflictingRule(t *testing.T) {
 			"Both ACNP",
 			reachabilityBothACNP,
 			[]metav1.Object{builder1.Get(), builder2.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1537,7 +1518,6 @@ func testACNPRulePrioirty(t *testing.T) {
 			"Both ACNP",
 			reachabilityBothACNP,
 			[]metav1.Object{builder2.Get(), builder1.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1573,7 +1553,6 @@ func testACNPPortRange(t *testing.T) {
 		fmt.Sprintf("ACNP Drop Port 8080:8085"),
 		reachability,
 		[]metav1.Object{builder.Get()},
-		nil,
 		[]int32{8080, 8081, 8082, 8083, 8084, 8085},
 		0,
 		nil,
@@ -1602,7 +1581,6 @@ func testANPPortRange(t *testing.T) {
 		fmt.Sprintf("ANP Drop Port 8080:8085"),
 		reachability,
 		[]metav1.Object{builder.Get()},
-		nil,
 		[]int32{8080, 8081, 8082, 8083, 8084, 8085},
 		0,
 		nil,
@@ -1631,7 +1609,6 @@ func testANPBasic(t *testing.T) {
 			"Port 80",
 			reachability,
 			[]metav1.Object{builder.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1647,8 +1624,7 @@ func testANPBasic(t *testing.T) {
 		{
 			"Port 80",
 			reachability,
-			[]metav1.Object{builder.Get(), k8sNPBuilder.Get()},
-			nil,
+			[]metav1.Object{k8sNPBuilder.Get()},
 			[]int32{80},
 			0,
 			nil,
@@ -1724,7 +1700,6 @@ func testAppliedToPerRule(t *testing.T) {
 			"Port 80",
 			reachability,
 			[]metav1.Object{builder.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1752,7 +1727,6 @@ func testAppliedToPerRule(t *testing.T) {
 			"Port 80",
 			reachability2,
 			[]metav1.Object{builder2.Get()},
-			nil,
 			[]int32{80},
 			0,
 			nil,
@@ -1787,8 +1761,7 @@ func testACNPClusterGroupServiceRefCreateAndUpdate(t *testing.T, data *TestData)
 	testStep1 := &TestStep{
 		"Port 80",
 		reachability,
-		[]metav1.Object{builder.Get()},
-		[]metav1.Object{svc1, svc2, cgBuilder1.Get(), cgBuilder2.Get()},
+		[]metav1.Object{svc1, svc2, cgBuilder1.Get(), cgBuilder2.Get(), builder.Get()},
 		[]int32{80},
 		0,
 		nil,
@@ -1819,7 +1792,6 @@ func testACNPClusterGroupServiceRefCreateAndUpdate(t *testing.T, data *TestData)
 	testStep2 := &TestStep{
 		"Port 80 updated",
 		reachability2,
-		[]metav1.Object{builder.Get()},
 		[]metav1.Object{svc1Updated, svc3, cgBuilder1.Get(), cgBuilder2Updated.Get()},
 		[]int32{80},
 		0,
@@ -1837,7 +1809,6 @@ func testACNPClusterGroupServiceRefCreateAndUpdate(t *testing.T, data *TestData)
 		"Port 80 ACNP spec updated to selector",
 		reachability,
 		[]metav1.Object{builderUpdated.Get()},
-		[]metav1.Object{},
 		[]int32{80},
 		0,
 		nil,
@@ -1860,8 +1831,7 @@ func executeTestsWithData(t *testing.T, testList []*TestCase, data *TestData) {
 		log.Infof("running test case %s", testCase.Name)
 		for _, step := range testCase.Steps {
 			log.Infof("running step %s of test case %s", step.Name, testCase.Name)
-			applyTestStepServicesAndGroups(t, step)
-			applyTestStepPolicies(t, step)
+			applyTestStepResources(t, step)
 			reachability := step.Reachability
 			if reachability != nil {
 				start := time.Now()
@@ -1885,8 +1855,7 @@ func executeTestsWithData(t *testing.T, testList []*TestCase, data *TestData) {
 			}
 		}
 		log.Debugf("Cleaning-up all policies and groups created by this Testcase and sleeping for %v", networkPolicyDelay)
-		cleanupTestCasePolicies(t, testCase)
-		cleanupTestCaseServicesAndGroups(t, testCase)
+		cleanupTestCaseResources(t, testCase)
 	}
 	allTestList = append(allTestList, testList...)
 }
@@ -1907,39 +1876,50 @@ func doProbe(t *testing.T, data *TestData, p *CustomProbe) {
 	}
 }
 
-func applyTestStepPolicies(t *testing.T, step *TestStep) {
-	for _, policy := range step.Policies {
-		switch p := policy.(type) {
+func applyTestStepResources(t *testing.T, step *TestStep) {
+	for _, resource := range step.TestResources {
+		switch r := resource.(type) {
 		case *secv1alpha1.ClusterNetworkPolicy:
-			_, err := k8sUtils.CreateOrUpdateACNP(p)
+			_, err := k8sUtils.CreateOrUpdateACNP(r)
 			failOnError(err, t)
 		case *secv1alpha1.NetworkPolicy:
-			_, err := k8sUtils.CreateOrUpdateANP(p)
+			_, err := k8sUtils.CreateOrUpdateANP(r)
 			failOnError(err, t)
 		case *v1net.NetworkPolicy:
-			_, err := k8sUtils.CreateOrUpdateNetworkPolicy(p)
+			_, err := k8sUtils.CreateOrUpdateNetworkPolicy(r)
+			failOnError(err, t)
+		case *corev1a2.ClusterGroup:
+			_, err := k8sUtils.CreateOrUpdateCG(r)
+			failOnError(err, t)
+		case *v1.Service:
+			_, err := k8sUtils.CreateOrUpdateService(r)
 			failOnError(err, t)
 		}
 	}
-	if len(step.Policies) > 0 {
+	if len(step.TestResources) > 0 {
 		log.Debugf("Sleeping for %v for all policies to take effect", networkPolicyDelay)
 		time.Sleep(networkPolicyDelay)
 	}
 }
 
-func cleanupTestCasePolicies(t *testing.T, c *TestCase) {
+func cleanupTestCaseResources(t *testing.T, c *TestCase) {
 	// TestSteps in a TestCase may first create and then update the same policy.
 	// Use sets to avoid duplicates.
 	acnpsToDelete, anpsToDelete, npsToDelete := sets.String{}, sets.String{}, sets.String{}
+	svcsToDelete, groupsToDelete := sets.String{}, sets.String{}
 	for _, step := range c.Steps {
-		for _, policy := range step.Policies {
-			switch p := policy.(type) {
+		for _, resource := range step.TestResources {
+			switch r := resource.(type) {
 			case *secv1alpha1.ClusterNetworkPolicy:
-				acnpsToDelete.Insert(p.Name)
+				acnpsToDelete.Insert(r.Name)
 			case *secv1alpha1.NetworkPolicy:
-				anpsToDelete.Insert(p.Namespace + "/" + p.Name)
+				anpsToDelete.Insert(r.Namespace + "/" + r.Name)
 			case *v1net.NetworkPolicy:
-				npsToDelete.Insert(p.Namespace + "/" + p.Name)
+				npsToDelete.Insert(r.Namespace + "/" + r.Name)
+			case *corev1a2.ClusterGroup:
+				groupsToDelete.Insert(r.Name)
+			case *v1.Service:
+				svcsToDelete.Insert(r.Namespace + "/" + r.Name)
 			}
 		}
 	}
@@ -1952,48 +1932,15 @@ func cleanupTestCasePolicies(t *testing.T, c *TestCase) {
 	for _, np := range npsToDelete.List() {
 		failOnError(k8sUtils.DeleteNetworkPolicy(strings.Split(np, "/")[0], strings.Split(np, "/")[1]), t)
 	}
-	if acnpsToDelete.Len()+anpsToDelete.Len()+npsToDelete.Len() > 0 {
-		log.Debugf("Sleeping for %v for all policy deletions to take effect", networkPolicyDelay)
-		time.Sleep(networkPolicyDelay)
-	}
-}
-
-func applyTestStepServicesAndGroups(t *testing.T, step *TestStep) {
-	for _, obj := range step.ServicesAndGroups {
-		switch o := obj.(type) {
-		case *corev1a2.ClusterGroup:
-			_, err := k8sUtils.CreateOrUpdateCG(o)
-			failOnError(err, t)
-		case *v1.Service:
-			_, err := k8sUtils.CreateOrUpdateService(o)
-			failOnError(err, t)
-		}
-	}
-	if len(step.ServicesAndGroups) > 0 {
-		log.Debugf("Sleeping for %v for all groups to have members computed", groupDelay)
-		time.Sleep(groupDelay)
-	}
-}
-
-func cleanupTestCaseServicesAndGroups(t *testing.T, c *TestCase) {
-	// TestSteps in a TestCase may first create and then update the same Group/Service.
-	// Use sets to avoid duplicates.
-	svcsToDelete, groupsToDelete := sets.String{}, sets.String{}
-	for _, step := range c.Steps {
-		for _, obj := range step.ServicesAndGroups {
-			switch o := obj.(type) {
-			case *corev1a2.ClusterGroup:
-				groupsToDelete.Insert(o.Name)
-			case *v1.Service:
-				svcsToDelete.Insert(o.Namespace + "/" + o.Name)
-			}
-		}
-	}
 	for _, cg := range groupsToDelete.List() {
 		failOnError(k8sUtils.DeleteCG(cg), t)
 	}
 	for _, svc := range svcsToDelete.List() {
 		failOnError(k8sUtils.DeleteService(strings.Split(svc, "/")[0], strings.Split(svc, "/")[1]), t)
+	}
+	if acnpsToDelete.Len()+anpsToDelete.Len()+npsToDelete.Len() > 0 {
+		log.Debugf("Sleeping for %v for all policy deletions to take effect", networkPolicyDelay)
+		time.Sleep(networkPolicyDelay)
 	}
 }
 
