@@ -22,6 +22,8 @@ import (
 	"time"
 
 	v1 "k8s.io/api/admissionregistration/v1"
+	apiextensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -58,6 +60,9 @@ var (
 	mutationWebhooks = []string{
 		"crdmutator.antrea.tanzu.vmware.com",
 	}
+	conversionWebhooks = []string{
+		"clustergroups.core.antrea.tanzu.vmware.com",
+	}
 	optionalMutationWebhooks = []string{
 		"labelsmutator.antrea.io",
 	}
@@ -73,8 +78,9 @@ type CACertController struct {
 	// queue only ever has one item, but it has nice error handling backoff/retry semantics
 	queue workqueue.RateLimitingInterface
 
-	client           kubernetes.Interface
-	aggregatorClient clientset.Interface
+	client             kubernetes.Interface
+	aggregatorClient   clientset.Interface
+	apiExtensionClient apiextensionclientset.Interface
 }
 
 var _ dynamiccertificates.Listener = &CACertController{}
@@ -86,12 +92,14 @@ func GetCAConfigMapNamespace() string {
 func newCACertController(caContentProvider dynamiccertificates.CAContentProvider,
 	client kubernetes.Interface,
 	aggregatorClient clientset.Interface,
+	apiExtensionClient apiextensionclientset.Interface,
 ) *CACertController {
 	c := &CACertController{
-		caContentProvider: caContentProvider,
-		queue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "CACertController"),
-		client:            client,
-		aggregatorClient:  aggregatorClient,
+		caContentProvider:  caContentProvider,
+		queue:              workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "CACertController"),
+		client:             client,
+		aggregatorClient:   aggregatorClient,
+		apiExtensionClient: apiExtensionClient,
 	}
 	if notifier, ok := caContentProvider.(dynamiccertificates.Notifier); ok {
 		notifier.AddListener(c)
@@ -139,6 +147,33 @@ func (c *CACertController) syncCACert() error {
 		}
 		if err := c.syncValidatingWebhooks(caCert); err != nil {
 			return err
+		}
+		if err := c.syncConversionWebhooks(caCert); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *CACertController) syncConversionWebhooks(caCert []byte) error {
+	klog.Info("Syncing CA certificate with CRDs that have conversion webhooks")
+	for _, name := range conversionWebhooks {
+		crdDef, err := c.apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("error getting CRD definition for %s: %v", name, err)
+		}
+		if crdDef.Spec.Conversion == nil || crdDef.Spec.Conversion.Strategy != apiextensionv1.WebhookConverter {
+			return fmt.Errorf("CRD %s does not have webhook conversion registered", name)
+		}
+		updated := false
+		if !bytes.Equal(crdDef.Spec.Conversion.Webhook.ClientConfig.CABundle, caCert) {
+			updated = true
+			crdDef.Spec.Conversion.Webhook.ClientConfig.CABundle = caCert
+		}
+		if updated {
+			if _, err := c.apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Update(context.TODO(), crdDef, metav1.UpdateOptions{}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

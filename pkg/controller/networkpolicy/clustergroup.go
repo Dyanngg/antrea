@@ -24,7 +24,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/vmware-tanzu/antrea/pkg/apis/controlplane"
-	corev1a2 "github.com/vmware-tanzu/antrea/pkg/apis/core/v1alpha2"
+	corev1a3 "github.com/vmware-tanzu/antrea/pkg/apis/core/v1alpha3"
 	secv1alpha1 "github.com/vmware-tanzu/antrea/pkg/apis/security/v1alpha1"
 	"github.com/vmware-tanzu/antrea/pkg/controller/networkpolicy/store"
 	antreatypes "github.com/vmware-tanzu/antrea/pkg/controller/types"
@@ -32,7 +32,7 @@ import (
 
 // addClusterGroup is responsible for processing the ADD event of a ClusterGroup resource.
 func (n *NetworkPolicyController) addClusterGroup(curObj interface{}) {
-	cg := curObj.(*corev1a2.ClusterGroup)
+	cg := curObj.(*corev1a3.ClusterGroup)
 	key := internalGroupKeyFunc(cg)
 	klog.V(2).Infof("Processing ADD event for ClusterGroup %s", cg.Name)
 	newGroup := n.processClusterGroup(cg)
@@ -43,15 +43,17 @@ func (n *NetworkPolicyController) addClusterGroup(curObj interface{}) {
 
 // updateClusterGroup is responsible for processing the UPDATE event of a ClusterGroup resource.
 func (n *NetworkPolicyController) updateClusterGroup(oldObj, curObj interface{}) {
-	cg := curObj.(*corev1a2.ClusterGroup)
-	og := oldObj.(*corev1a2.ClusterGroup)
+	cg := curObj.(*corev1a3.ClusterGroup)
+	og := oldObj.(*corev1a3.ClusterGroup)
 	key := internalGroupKeyFunc(cg)
 	klog.V(2).Infof("Processing UPDATE event for ClusterGroup %s", cg.Name)
 	newGroup := n.processClusterGroup(cg)
 	oldGroup := n.processClusterGroup(og)
-	ipBlockUpdated := newGroup.IPBlock != oldGroup.IPBlock
+	selectorUpdated := getNormalizedNameForSelector(newGroup.Selector) != getNormalizedNameForSelector(oldGroup.Selector)
+	// TODO: implement this!!!
+	ipBlockUpdated := len(newGroup.IPBlocks) != len(oldGroup.IPBlocks)
 	svcRefUpdated := newGroup.ServiceReference != oldGroup.ServiceReference
-	if getNormalizedNameForSelector(newGroup.Selector) == getNormalizedNameForSelector(oldGroup.Selector) && !ipBlockUpdated && !svcRefUpdated {
+	if !selectorUpdated && !ipBlockUpdated && !svcRefUpdated {
 		// No change in the selectors of the ClusterGroup. No need to enqueue for further sync.
 		return
 	}
@@ -61,7 +63,7 @@ func (n *NetworkPolicyController) updateClusterGroup(oldObj, curObj interface{})
 
 // deleteClusterGroup is responsible for processing the DELETE event of a ClusterGroup resource.
 func (n *NetworkPolicyController) deleteClusterGroup(oldObj interface{}) {
-	og, ok := oldObj.(*corev1a2.ClusterGroup)
+	og, ok := oldObj.(*corev1a3.ClusterGroup)
 	klog.V(2).Infof("Processing DELETE event for ClusterGroup %s", og.Name)
 	if !ok {
 		tombstone, ok := oldObj.(cache.DeletedFinalStateUnknown)
@@ -69,7 +71,7 @@ func (n *NetworkPolicyController) deleteClusterGroup(oldObj interface{}) {
 			klog.Errorf("Error decoding object when deleting ClusterGroup, invalid type: %v", oldObj)
 			return
 		}
-		og, ok = tombstone.Obj.(*corev1a2.ClusterGroup)
+		og, ok = tombstone.Obj.(*corev1a3.ClusterGroup)
 		if !ok {
 			klog.Errorf("Error decoding object tombstone when deleting ClusterGroup, invalid type: %v", tombstone.Obj)
 			return
@@ -84,14 +86,16 @@ func (n *NetworkPolicyController) deleteClusterGroup(oldObj interface{}) {
 	n.enqueueInternalGroup(key)
 }
 
-func (n *NetworkPolicyController) processClusterGroup(cg *corev1a2.ClusterGroup) *antreatypes.Group {
+func (n *NetworkPolicyController) processClusterGroup(cg *corev1a3.ClusterGroup) *antreatypes.Group {
 	internalGroup := antreatypes.Group{
 		Name: cg.Name,
 		UID:  cg.UID,
 	}
-	if cg.Spec.IPBlock != nil {
-		ipb, _ := toAntreaIPBlockForCRD(cg.Spec.IPBlock)
-		internalGroup.IPBlock = ipb
+	if len(cg.Spec.IPBlocks) > 0 {
+		for _, ipblock := range cg.Spec.IPBlocks{
+			ipb, _ := toAntreaIPBlockForCRD(&ipblock)
+			internalGroup.IPBlocks = append(internalGroup.IPBlocks, *ipb)
+		}
 		return &internalGroup
 	}
 	svcSelector := cg.Spec.ServiceReference
@@ -201,7 +205,7 @@ func (n *NetworkPolicyController) syncInternalGroup(key string) error {
 }
 
 // triggerCNPUpdates triggers processing of ClusterNetworkPolicies associated with the input ClusterGroup.
-func (n *NetworkPolicyController) triggerCNPUpdates(cg *corev1a2.ClusterGroup) error {
+func (n *NetworkPolicyController) triggerCNPUpdates(cg *corev1a3.ClusterGroup) error {
 	// If a ClusterGroup is added/updated, it might have a reference in ClusterNetworkPolicy.
 	cnps, err := n.cnpInformer.Informer().GetIndexer().ByIndex(ClusterGroupIndex, cg.Name)
 	if err != nil {
@@ -250,31 +254,31 @@ func (n *NetworkPolicyController) triggerCNPUpdates(cg *corev1a2.ClusterGroup) e
 }
 
 // updateGroupStatus updates the Status subresource for a ClusterGroup.
-func (n *NetworkPolicyController) updateGroupStatus(cg *corev1a2.ClusterGroup, cStatus v1.ConditionStatus) error {
-	condStatus := corev1a2.GroupCondition{
+func (n *NetworkPolicyController) updateGroupStatus(cg *corev1a3.ClusterGroup, cStatus v1.ConditionStatus) error {
+	condStatus := corev1a3.GroupCondition{
 		Status: cStatus,
-		Type:   corev1a2.GroupMembersComputed,
+		Type:   corev1a3.GroupMembersComputed,
 	}
 	if groupMembersComputedConditionEqual(cg.Status.Conditions, condStatus) {
 		// There is no change in conditions.
 		return nil
 	}
 	condStatus.LastTransitionTime = metav1.Now()
-	status := corev1a2.GroupStatus{
-		Conditions: []corev1a2.GroupCondition{condStatus},
+	status := corev1a3.GroupStatus{
+		Conditions: []corev1a3.GroupCondition{condStatus},
 	}
 	klog.V(4).Infof("Updating ClusterGroup %s status to %#v", cg.Name, condStatus)
 	toUpdate := cg.DeepCopy()
 	toUpdate.Status = status
-	_, err := n.crdClient.CoreV1alpha2().ClusterGroups().UpdateStatus(context.TODO(), toUpdate, metav1.UpdateOptions{})
+	_, err := n.crdClient.CoreV1alpha3().ClusterGroups().UpdateStatus(context.TODO(), toUpdate, metav1.UpdateOptions{})
 	return err
 }
 
 // groupMembersComputedConditionEqual checks whether the condition status for GroupMembersComputed condition
 // is same. Returns true if equal, otherwise returns false. It disregards the lastTransitionTime field.
-func groupMembersComputedConditionEqual(conds []corev1a2.GroupCondition, condition corev1a2.GroupCondition) bool {
+func groupMembersComputedConditionEqual(conds []corev1a3.GroupCondition, condition corev1a3.GroupCondition) bool {
 	for _, c := range conds {
-		if c.Type == corev1a2.GroupMembersComputed {
+		if c.Type == corev1a3.GroupMembersComputed {
 			if c.Status == condition.Status {
 				return true
 			}

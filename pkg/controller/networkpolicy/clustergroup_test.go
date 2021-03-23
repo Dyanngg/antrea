@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/vmware-tanzu/antrea/pkg/apis/controlplane"
-	corev1a2 "github.com/vmware-tanzu/antrea/pkg/apis/core/v1alpha2"
+	corev1a3 "github.com/vmware-tanzu/antrea/pkg/apis/core/v1alpha3"
 	secv1alpha1 "github.com/vmware-tanzu/antrea/pkg/apis/security/v1alpha1"
 	antreatypes "github.com/vmware-tanzu/antrea/pkg/controller/types"
 )
@@ -37,14 +37,14 @@ func TestProcessClusterGroup(t *testing.T) {
 	cidrIPNet, _ := cidrStrToIPNet(cidr)
 	tests := []struct {
 		name          string
-		inputGroup    *corev1a2.ClusterGroup
+		inputGroup    *corev1a3.ClusterGroup
 		expectedGroup *antreatypes.Group
 	}{
 		{
 			name: "cg-with-ns-selector",
-			inputGroup: &corev1a2.ClusterGroup{
+			inputGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgA", UID: "uidA"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					NamespaceSelector: &selectorA,
 				},
 			},
@@ -56,9 +56,9 @@ func TestProcessClusterGroup(t *testing.T) {
 		},
 		{
 			name: "cg-with-pod-selector",
-			inputGroup: &corev1a2.ClusterGroup{
+			inputGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgB", UID: "uidB"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					PodSelector: &selectorB,
 				},
 			},
@@ -70,9 +70,9 @@ func TestProcessClusterGroup(t *testing.T) {
 		},
 		{
 			name: "cg-with-pod-ns-selector",
-			inputGroup: &corev1a2.ClusterGroup{
+			inputGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgC", UID: "uidC"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					NamespaceSelector: &selectorD,
 					PodSelector:       &selectorC,
 				},
@@ -85,9 +85,9 @@ func TestProcessClusterGroup(t *testing.T) {
 		},
 		{
 			name: "cg-with-ip-block",
-			inputGroup: &corev1a2.ClusterGroup{
+			inputGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgD", UID: "uidD"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					IPBlock: &secv1alpha1.IPBlock{
 						CIDR: cidr,
 					},
@@ -96,18 +96,20 @@ func TestProcessClusterGroup(t *testing.T) {
 			expectedGroup: &antreatypes.Group{
 				UID:  "uidD",
 				Name: "cgD",
-				IPBlock: &controlplane.IPBlock{
-					CIDR:   *cidrIPNet,
-					Except: []controlplane.IPNet{},
+				IPBlocks: []controlplane.IPBlock{
+					{
+						CIDR:   *cidrIPNet,
+						Except: []controlplane.IPNet{},
+					},
 				},
 			},
 		},
 		{
 			name: "cg-with-svc-reference",
-			inputGroup: &corev1a2.ClusterGroup{
+			inputGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgE", UID: "uidE"},
-				Spec: corev1a2.GroupSpec{
-					ServiceReference: &corev1a2.ServiceReference{
+				Spec: corev1a3.GroupSpec{
+					ServiceReference: &corev1a3.ServiceReference{
 						Name:      "test-svc",
 						Namespace: "test-ns",
 					},
@@ -141,14 +143,14 @@ func TestAddClusterGroup(t *testing.T) {
 	cidrIPNet, _ := cidrStrToIPNet(cidr)
 	tests := []struct {
 		name          string
-		inputGroup    *corev1a2.ClusterGroup
+		inputGroup    *corev1a3.ClusterGroup
 		expectedGroup *antreatypes.Group
 	}{
 		{
 			name: "cg-with-ns-selector",
-			inputGroup: &corev1a2.ClusterGroup{
+			inputGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgA", UID: "uidA"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					NamespaceSelector: &selectorA,
 				},
 			},
@@ -160,9 +162,9 @@ func TestAddClusterGroup(t *testing.T) {
 		},
 		{
 			name: "cg-with-pod-selector",
-			inputGroup: &corev1a2.ClusterGroup{
+			inputGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgB", UID: "uidB"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					PodSelector: &selectorB,
 				},
 			},
@@ -174,9 +176,9 @@ func TestAddClusterGroup(t *testing.T) {
 		},
 		{
 			name: "cg-with-pod-ns-selector",
-			inputGroup: &corev1a2.ClusterGroup{
+			inputGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgC", UID: "uidC"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					NamespaceSelector: &selectorD,
 					PodSelector:       &selectorC,
 				},
@@ -189,20 +191,24 @@ func TestAddClusterGroup(t *testing.T) {
 		},
 		{
 			name: "cg-with-ip-block",
-			inputGroup: &corev1a2.ClusterGroup{
+			inputGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgD", UID: "uidD"},
-				Spec: corev1a2.GroupSpec{
-					IPBlock: &secv1alpha1.IPBlock{
-						CIDR: cidr,
+				Spec: corev1a3.GroupSpec{
+					IPBlocks: []secv1alpha1.IPBlock{
+						{
+							CIDR: cidr,
+						},
 					},
 				},
 			},
 			expectedGroup: &antreatypes.Group{
 				UID:  "uidD",
 				Name: "cgD",
-				IPBlock: &controlplane.IPBlock{
-					CIDR:   *cidrIPNet,
-					Except: []controlplane.IPNet{},
+				IPBlocks: []controlplane.IPBlock{
+					{
+						CIDR:   *cidrIPNet,
+						Except: []controlplane.IPNet{},
+					},
 				},
 			},
 		},
@@ -224,9 +230,9 @@ func TestUpdateClusterGroup(t *testing.T) {
 	selectorB := metav1.LabelSelector{MatchLabels: map[string]string{"foo2": "bar2"}}
 	selectorC := metav1.LabelSelector{MatchLabels: map[string]string{"foo3": "bar3"}}
 	selectorD := metav1.LabelSelector{MatchLabels: map[string]string{"foo4": "bar4"}}
-	testCG := corev1a2.ClusterGroup{
+	testCG := corev1a3.ClusterGroup{
 		ObjectMeta: metav1.ObjectMeta{Name: "cgA", UID: "uidA"},
-		Spec: corev1a2.GroupSpec{
+		Spec: corev1a3.GroupSpec{
 			NamespaceSelector: &selectorA,
 		},
 	}
@@ -234,14 +240,14 @@ func TestUpdateClusterGroup(t *testing.T) {
 	cidrIPNet, _ := cidrStrToIPNet(cidr)
 	tests := []struct {
 		name          string
-		updatedGroup  *corev1a2.ClusterGroup
+		updatedGroup  *corev1a3.ClusterGroup
 		expectedGroup *antreatypes.Group
 	}{
 		{
 			name: "cg-update-ns-selector",
-			updatedGroup: &corev1a2.ClusterGroup{
+			updatedGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgA", UID: "uidA"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					NamespaceSelector: &selectorB,
 				},
 			},
@@ -253,9 +259,9 @@ func TestUpdateClusterGroup(t *testing.T) {
 		},
 		{
 			name: "cg-update-pod-selector",
-			updatedGroup: &corev1a2.ClusterGroup{
+			updatedGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgA", UID: "uidA"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					PodSelector: &selectorC,
 				},
 			},
@@ -267,9 +273,9 @@ func TestUpdateClusterGroup(t *testing.T) {
 		},
 		{
 			name: "cg-update-pod-ns-selector",
-			updatedGroup: &corev1a2.ClusterGroup{
+			updatedGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgA", UID: "uidA"},
-				Spec: corev1a2.GroupSpec{
+				Spec: corev1a3.GroupSpec{
 					NamespaceSelector: &selectorD,
 					PodSelector:       &selectorC,
 				},
@@ -282,29 +288,33 @@ func TestUpdateClusterGroup(t *testing.T) {
 		},
 		{
 			name: "cg-update-ip-block",
-			updatedGroup: &corev1a2.ClusterGroup{
+			updatedGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgA", UID: "uidA"},
-				Spec: corev1a2.GroupSpec{
-					IPBlock: &secv1alpha1.IPBlock{
-						CIDR: cidr,
+				Spec: corev1a3.GroupSpec{
+					IPBlocks: []secv1alpha1.IPBlock{
+						{
+							CIDR: cidr,
+						},
 					},
 				},
 			},
 			expectedGroup: &antreatypes.Group{
 				UID:  "uidA",
 				Name: "cgA",
-				IPBlock: &controlplane.IPBlock{
-					CIDR:   *cidrIPNet,
-					Except: []controlplane.IPNet{},
+				IPBlocks: []controlplane.IPBlock{
+					{
+						CIDR:   *cidrIPNet,
+						Except: []controlplane.IPNet{},
+					},
 				},
 			},
 		},
 		{
 			name: "cg-update-svc-reference",
-			updatedGroup: &corev1a2.ClusterGroup{
+			updatedGroup: &corev1a3.ClusterGroup{
 				ObjectMeta: metav1.ObjectMeta{Name: "cgA", UID: "uidA"},
-				Spec: corev1a2.GroupSpec{
-					ServiceReference: &corev1a2.ServiceReference{
+				Spec: corev1a3.GroupSpec{
+					ServiceReference: &corev1a3.ServiceReference{
 						Name:      "test-svc",
 						Namespace: "test-ns",
 					},
@@ -335,9 +345,9 @@ func TestUpdateClusterGroup(t *testing.T) {
 
 func TestDeleteCG(t *testing.T) {
 	selectorA := metav1.LabelSelector{MatchLabels: map[string]string{"foo1": "bar1"}}
-	testCG := corev1a2.ClusterGroup{
+	testCG := corev1a3.ClusterGroup{
 		ObjectMeta: metav1.ObjectMeta{Name: "cgA", UID: "uidA"},
-		Spec: corev1a2.GroupSpec{
+		Spec: corev1a3.GroupSpec{
 			NamespaceSelector: &selectorA,
 		},
 	}
@@ -352,15 +362,15 @@ func TestDeleteCG(t *testing.T) {
 func TestGroupMembersComputedConditionEqual(t *testing.T) {
 	tests := []struct {
 		name          string
-		existingConds []corev1a2.GroupCondition
+		existingConds []corev1a3.GroupCondition
 		checkStatus   corev1.ConditionStatus
 		expValue      bool
 	}{
 		{
 			name: "groupmem-cond-exists-not-equal",
-			existingConds: []corev1a2.GroupCondition{
+			existingConds: []corev1a3.GroupCondition{
 				{
-					Type:   corev1a2.GroupMembersComputed,
+					Type:   corev1a3.GroupMembersComputed,
 					Status: corev1.ConditionFalse,
 				},
 			},
@@ -369,9 +379,9 @@ func TestGroupMembersComputedConditionEqual(t *testing.T) {
 		},
 		{
 			name: "groupmem-cond-exists-equal",
-			existingConds: []corev1a2.GroupCondition{
+			existingConds: []corev1a3.GroupCondition{
 				{
-					Type:   corev1a2.GroupMembersComputed,
+					Type:   corev1a3.GroupMembersComputed,
 					Status: corev1.ConditionTrue,
 				},
 			},
@@ -380,7 +390,7 @@ func TestGroupMembersComputedConditionEqual(t *testing.T) {
 		},
 		{
 			name: "groupmem-cond-not-exists-not-equal",
-			existingConds: []corev1a2.GroupCondition{
+			existingConds: []corev1a3.GroupCondition{
 				{
 					Status: corev1.ConditionFalse,
 				},
@@ -391,8 +401,8 @@ func TestGroupMembersComputedConditionEqual(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			inCond := corev1a2.GroupCondition{
-				Type:   corev1a2.GroupMembersComputed,
+			inCond := corev1a3.GroupCondition{
+				Type:   corev1a3.GroupMembersComputed,
 				Status: tt.checkStatus,
 			}
 			actualValue := groupMembersComputedConditionEqual(tt.existingConds, inCond)
@@ -621,7 +631,7 @@ var testPods = []*corev1.Pod{
 	},
 }
 
-var externalEntities = []*corev1a2.ExternalEntity{
+var externalEntities = []*corev1a3.ExternalEntity{
 	{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ee1",
@@ -629,8 +639,8 @@ var externalEntities = []*corev1a2.ExternalEntity{
 			UID:       "uid3",
 			Labels:    map[string]string{"app": "meh"},
 		},
-		Spec: corev1a2.ExternalEntitySpec{
-			Endpoints: []corev1a2.Endpoint{
+		Spec: corev1a3.ExternalEntitySpec{
+			Endpoints: []corev1a3.Endpoint{
 				{
 					IP:   "60.10.0.1",
 					Name: "vm1",
@@ -646,8 +656,8 @@ var externalEntities = []*corev1a2.ExternalEntity{
 			UID:       "uid4",
 			Labels:    map[string]string{"app": "bruh"},
 		},
-		Spec: corev1a2.ExternalEntitySpec{
-			Endpoints: []corev1a2.Endpoint{
+		Spec: corev1a3.ExternalEntitySpec{
+			Endpoints: []corev1a3.Endpoint{
 				{
 					IP:   "60.10.0.2",
 					Name: "vm2",

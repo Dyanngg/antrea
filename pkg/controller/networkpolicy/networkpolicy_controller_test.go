@@ -91,8 +91,8 @@ func newController(objects ...runtime.Object) (*fake.Clientset, *networkPolicyCo
 	addressGroupStore := store.NewAddressGroupStore()
 	internalNetworkPolicyStore := store.NewNetworkPolicyStore()
 	internalGroupStore := store.NewGroupStore()
-	cgInformer := crdInformerFactory.Core().V1alpha2().ClusterGroups()
-	cgStore := crdInformerFactory.Core().V1alpha2().ClusterGroups().Informer().GetStore()
+	cgInformer := crdInformerFactory.Core().V1alpha3().ClusterGroups()
+	cgStore := crdInformerFactory.Core().V1alpha3().ClusterGroups().Informer().GetStore()
 	groupEntityIndex := grouping.NewGroupEntityIndex()
 	groupingController := grouping.NewGroupEntityController(groupEntityIndex,
 		informerFactory.Core().V1().Pods(),
@@ -148,7 +148,7 @@ func newControllerWithoutEventHandler(objects ...runtime.Object) (*fake.Clientse
 	internalNetworkPolicyStore := store.NewNetworkPolicyStore()
 	internalGroupStore := store.NewGroupStore()
 	networkPolicyInformer := informerFactory.Networking().V1().NetworkPolicies()
-	cgStore := crdInformerFactory.Core().V1alpha2().ClusterGroups().Informer().GetStore()
+	cgStore := crdInformerFactory.Core().V1alpha3().ClusterGroups().Informer().GetStore()
 	groupEntityIndex := grouping.NewGroupEntityIndex()
 	npController := &NetworkPolicyController{
 		kubeClient:                 client,

@@ -1,4 +1,4 @@
-// Copyright 2020 Antrea Authors
+// Copyright 2021 Antrea Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"fmt"
 
 	v1beta1 "github.com/vmware-tanzu/antrea/pkg/apis/clusterinformation/v1beta1"
-	v1alpha2 "github.com/vmware-tanzu/antrea/pkg/apis/core/v1alpha2"
+	v1alpha3 "github.com/vmware-tanzu/antrea/pkg/apis/core/v1alpha3"
 	v1alpha1 "github.com/vmware-tanzu/antrea/pkg/apis/ops/v1alpha1"
 	securityv1alpha1 "github.com/vmware-tanzu/antrea/pkg/apis/security/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -59,11 +59,11 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 	case v1beta1.SchemeGroupVersion.WithResource("antreacontrollerinfos"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Clusterinformation().V1beta1().AntreaControllerInfos().Informer()}, nil
 
-		// Group=core.antrea.tanzu.vmware.com, Version=v1alpha2
-	case v1alpha2.SchemeGroupVersion.WithResource("clustergroups"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1alpha2().ClusterGroups().Informer()}, nil
-	case v1alpha2.SchemeGroupVersion.WithResource("externalentities"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1alpha2().ExternalEntities().Informer()}, nil
+		// Group=core.antrea.tanzu.vmware.com, Version=v1alpha3
+	case v1alpha3.SchemeGroupVersion.WithResource("clustergroups"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1alpha3().ClusterGroups().Informer()}, nil
+	case v1alpha3.SchemeGroupVersion.WithResource("externalentities"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1alpha3().ExternalEntities().Informer()}, nil
 
 		// Group=ops.antrea.tanzu.vmware.com, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("traceflows"):

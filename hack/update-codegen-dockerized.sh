@@ -35,6 +35,7 @@ $GOPATH/bin/client-gen \
   --input "system/v1beta1" \
   --input "security/v1alpha1" \
   --input "core/v1alpha2" \
+  --input "core/v1alpha3" \
   --input "ops/v1alpha1" \
   --input "stats/v1alpha1" \
   --output-package "${ANTREA_PKG}/pkg/client/clientset" \
@@ -45,7 +46,9 @@ $GOPATH/bin/client-gen \
 
 # Generate listers with K8s codegen tools.
 $GOPATH/bin/lister-gen \
-  --input-dirs "${ANTREA_PKG}/pkg/apis/security/v1alpha1,${ANTREA_PKG}/pkg/apis/core/v1alpha2" \
+  --input-dirs "${ANTREA_PKG}/pkg/apis/security/v1alpha1" \
+  --input-dirs "${ANTREA_PKG}/pkg/apis/core/v1alpha2" \
+  --input-dirs "${ANTREA_PKG}/pkg/apis/core/v1alpha3" \
   --input-dirs "${ANTREA_PKG}/pkg/apis/ops/v1alpha1" \
   --input-dirs "${ANTREA_PKG}/pkg/apis/clusterinformation/v1beta1" \
   --output-package "${ANTREA_PKG}/pkg/client/listers" \
@@ -53,7 +56,9 @@ $GOPATH/bin/lister-gen \
 
 # Generate informers with K8s codegen tools.
 $GOPATH/bin/informer-gen \
-  --input-dirs "${ANTREA_PKG}/pkg/apis/security/v1alpha1,${ANTREA_PKG}/pkg/apis/core/v1alpha2" \
+  --input-dirs "${ANTREA_PKG}/pkg/apis/security/v1alpha1" \
+  --input-dirs "${ANTREA_PKG}/pkg/apis/core/v1alpha2" \
+  --input-dirs "${ANTREA_PKG}/pkg/apis/core/v1alpha3" \
   --input-dirs "${ANTREA_PKG}/pkg/apis/ops/v1alpha1" \
   --input-dirs "${ANTREA_PKG}/pkg/apis/clusterinformation/v1beta1" \
   --versioned-clientset-package "${ANTREA_PKG}/pkg/client/clientset/versioned" \
@@ -69,6 +74,7 @@ $GOPATH/bin/deepcopy-gen \
   --input-dirs "${ANTREA_PKG}/pkg/apis/system/v1beta1" \
   --input-dirs "${ANTREA_PKG}/pkg/apis/security/v1alpha1" \
   --input-dirs "${ANTREA_PKG}/pkg/apis/core/v1alpha2" \
+  --input-dirs "${ANTREA_PKG}/pkg/apis/core/v1alpha3" \
   --input-dirs "${ANTREA_PKG}/pkg/apis/ops/v1alpha1" \
   --input-dirs "${ANTREA_PKG}/pkg/apis/stats" \
   --input-dirs "${ANTREA_PKG}/pkg/apis/stats/v1alpha1" \

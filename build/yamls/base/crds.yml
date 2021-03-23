@@ -707,7 +707,7 @@ spec:
   versions:
     - name: v1alpha2
       served: true
-      storage: true
+      storage: false
       schema:
         openAPIV3Schema:
           type: object
@@ -750,6 +750,62 @@ spec:
                          type: string
       subresources:
         status: {}
+    - name: v1alpha3
+        served: true
+        storage: true
+        schema:
+          openAPIV3Schema:
+            type: object
+            properties:
+              spec:
+                type: object
+                properties:
+                  podSelector:
+                    x-kubernetes-preserve-unknown-fields: true
+                  namespaceSelector:
+                    x-kubernetes-preserve-unknown-fields: true
+                  externalEntitySelector:
+                    x-kubernetes-preserve-unknown-fields: true
+                  ipBlocks:
+                    type: array
+                      items:
+                        type: object
+                        properties:
+                          cidr:
+                            type: string
+                            format: cidr
+                  serviceReference:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      namespace:
+                        type: string
+              status:
+                type: object
+                properties:
+                  conditions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                        status:
+                          type: string
+                        lastTransitionTime:
+                          type: string
+        subresources:
+          status: {}
+  conversion:
+    strategy: Webhook
+    webhook:
+      conversionReviewVersions: ["v1alpha3", "v1alpha2"]
+      clientConfig:
+        service:
+          name: "antrea"
+          namespace: "kube-system"
+          path: "/convert/clustergroup"
   scope: Cluster
   names:
     plural: clustergroups

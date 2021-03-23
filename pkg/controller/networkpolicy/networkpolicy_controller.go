@@ -51,9 +51,9 @@ import (
 	secv1alpha1 "github.com/vmware-tanzu/antrea/pkg/apis/security/v1alpha1"
 	"github.com/vmware-tanzu/antrea/pkg/apiserver/storage"
 	"github.com/vmware-tanzu/antrea/pkg/client/clientset/versioned"
-	corev1a2informers "github.com/vmware-tanzu/antrea/pkg/client/informers/externalversions/core/v1alpha2"
+	corev1a3informers "github.com/vmware-tanzu/antrea/pkg/client/informers/externalversions/core/v1alpha3"
 	secinformers "github.com/vmware-tanzu/antrea/pkg/client/informers/externalversions/security/v1alpha1"
-	corev1a2listers "github.com/vmware-tanzu/antrea/pkg/client/listers/core/v1alpha2"
+	corev1a3listers "github.com/vmware-tanzu/antrea/pkg/client/listers/core/v1alpha3"
 	seclisters "github.com/vmware-tanzu/antrea/pkg/client/listers/security/v1alpha1"
 	"github.com/vmware-tanzu/antrea/pkg/controller/grouping"
 	"github.com/vmware-tanzu/antrea/pkg/controller/metrics"
@@ -160,10 +160,10 @@ type NetworkPolicyController struct {
 	// tierListerSynced is a function which returns true if the Tiers shared informer has been synced at least once.
 	tierListerSynced cache.InformerSynced
 
-	cgInformer corev1a2informers.ClusterGroupInformer
+	cgInformer corev1a3informers.ClusterGroupInformer
 	// cgLister is able to list/get ClusterGroups and is populated by the shared informer passed to
 	// NewClusterGroupController.
-	cgLister corev1a2listers.ClusterGroupLister
+	cgLister corev1a3listers.ClusterGroupLister
 	// cgListerSynced is a function which returns true if the ClusterGroup shared informer has been synced at least
 	// once.
 	cgListerSynced cache.InformerSynced
@@ -217,7 +217,7 @@ func NewNetworkPolicyController(kubeClient clientset.Interface,
 	cnpInformer secinformers.ClusterNetworkPolicyInformer,
 	anpInformer secinformers.NetworkPolicyInformer,
 	tierInformer secinformers.TierInformer,
-	cgInformer corev1a2informers.ClusterGroupInformer,
+	cgInformer corev1a3informers.ClusterGroupInformer,
 	addressGroupStore storage.Interface,
 	appliedToGroupStore storage.Interface,
 	internalNetworkPolicyStore storage.Interface,
