@@ -513,7 +513,7 @@ function run_e2e {
     if [[ $FLEXIBLE_IPAM == true ]]; then
         go test -v antrea.io/antrea/test/e2e --logs-export-dir `pwd`/antrea-test-logs --provider remote -timeout=100m --prometheus --antrea-ipam
     else
-        go test -v antrea.io/antrea/test/e2e --logs-export-dir `pwd`/antrea-test-logs --provider remote -timeout=100m --prometheus
+        go test -v antrea.io/antrea/test/e2e --logs-export-dir `pwd`/antrea-test-logs --provider remote -timeout=100m --prometheus -run=TestAntreaPolicy/TestFQDNFlaky
     fi
     if [[ "$?" != "0" ]]; then
         TEST_FAILURE=true

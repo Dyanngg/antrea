@@ -92,41 +92,54 @@ func (k *KubernetesUtils) probe(
 	port int32,
 	protocol v1.Protocol,
 ) PodConnectivityMark {
+	// HACK: inferring container name as c80, c81, etc, for simplicity.
+	containerName := fmt.Sprintf("c%v", port)
 	// There seems to be an issue when running Antrea in Kind where tunnel traffic is dropped at
 	// first. This leads to the first test being run consistently failing. To avoid this issue
-	// until it is resolved, we try to connect 3 times.
+	// until it is resolved, we try to connect 4 times. We ignore the first time result and use
+	// the last 3 times result to decide the connectivity.
 	// See https://github.com/antrea-io/antrea/issues/467.
+	ignoreCmd := []string{
+		"/bin/sh",
+		"-c",
+		fmt.Sprintf("/agnhost connect %s:%d --timeout=3s --protocol=%s", dstAddr, port, strings.ToLower(string(protocol))),
+	}
+	k.runCommandFromPod(pod.Namespace, pod.Name, containerName, ignoreCmd)
+
 	cmd := []string{
 		"/bin/sh",
 		"-c",
+		fmt.Sprintf("for i in $(seq 1 3); do /agnhost connect %s:%d --timeout=2s --protocol=%s; done;", dstAddr, port, strings.ToLower(string(protocol))),
 	}
-	switch protocol {
-	case v1.ProtocolTCP:
-		cmd = append(cmd, fmt.Sprintf("for i in $(seq 1 3); do /agnhost connect %s:%d --timeout=1s --protocol=tcp && exit 0 || true; done; exit 1", dstAddr, port))
-	case v1.ProtocolUDP:
-		cmd = append(cmd, fmt.Sprintf("for i in $(seq 1 3); do /agnhost connect %s:%d --timeout=1s --protocol=udp && exit 0 || true; done; exit 1", dstAddr, port))
-	case v1.ProtocolSCTP:
-		cmd = append(cmd, fmt.Sprintf("for i in $(seq 1 3); do /agnhost connect %s:%d --timeout=1s --protocol=sctp && exit 0 || true; done; exit 1", dstAddr, port))
-	}
-	// HACK: inferring container name as c80, c81, etc, for simplicity.
-	containerName := fmt.Sprintf("c%v", port)
 	log.Tracef("Running: kubectl exec %s -c %s -n %s -- %s", pod.Name, containerName, pod.Namespace, strings.Join(cmd, " "))
 	stdout, stderr, err := k.runCommandFromPod(pod.Namespace, pod.Name, containerName, cmd)
-	var curConnectivity PodConnectivityMark
 	if err != nil {
 		// log this error as trace since may be an expected failure
-		log.Tracef("%s -> %s: error when running command: err - %v /// stdout - %s /// stderr - %s", podName, dstName, err, stdout, stderr)
+		log.Infof("%s -> %s: error when running command: err - %v /// stdout - %s /// stderr - %s", podName, dstName, err, stdout, stderr)
 		// do not return an error
-		if strings.Contains(stderr, "TIMEOUT") {
-			curConnectivity = Dropped
-		} else {
-			curConnectivity = Rejected
-		}
-	} else {
-		curConnectivity = Connected
+		return decideProbeResult(stderr, 3)
 	}
+	return Connected
+}
 
-	return curConnectivity
+// decideProbeResult ...
+func decideProbeResult(stderr string, probeNum int) PodConnectivityMark {
+	resCount := map[PodConnectivityMark]int{
+		Connected: probeNum - strings.Count(stderr, "\n"),
+		Dropped:   strings.Count(stderr, "TIMEOUT"),
+		Rejected:  strings.Count(stderr, "REFUSED"),
+	}
+	log.Infof("%v", resCount)
+	if resCount[Rejected] == 0 && resCount[Connected] > 0 {
+		return Connected
+	}
+	if resCount[Connected] == 0 && resCount[Rejected] > 0 {
+		return Rejected
+	}
+	if resCount[Dropped] == probeNum {
+		return Dropped
+	}
+	return Error
 }
 
 // Probe execs into a Pod and checks its connectivity to another Pod. Of course it

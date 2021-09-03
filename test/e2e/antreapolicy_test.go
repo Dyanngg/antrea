@@ -103,6 +103,7 @@ func failOnError(err error, t *testing.T) {
 		k8sUtils.Cleanup(namespaces)
 		t.Fatalf("test failed: %v", err)
 	}
+	// net.DialTimeout()
 }
 
 func warningOnTimeoutError(err error, t *testing.T) {
@@ -2456,12 +2457,17 @@ func testFQDNPolicy(t *testing.T) {
 		SetPriority(1.0).
 		SetAppliedToGroup([]ACNPAppliedToSpec{{NSSelector: map[string]string{}}})
 	builder.AddFQDNRule("*google.com", v1.ProtocolTCP, nil, nil, nil, "r1", nil, crdv1alpha1.RuleActionReject)
-	builder.AddFQDNRule("wayfair.com", v1.ProtocolTCP, nil, nil, nil, "r2", nil, crdv1alpha1.RuleActionDrop)
+	builder.AddFQDNRule("facebook.com", v1.ProtocolTCP, nil, nil, nil, "r2", nil, crdv1alpha1.RuleActionDrop)
+
+	acnp := builder.Get()
+	k8sUtils.CreateOrUpdateACNP(acnp)
+	failOnError(waitForResourceReady(acnp, timeout), t)
+	time.Sleep(networkPolicyDelay)
 
 	testcases := []podToAddrTestStep{
 		{
 			"x/a",
-			"drive.google.com",
+			"google.com",
 			80,
 			Rejected,
 		},
@@ -2473,20 +2479,23 @@ func testFQDNPolicy(t *testing.T) {
 		},
 		{
 			"y/a",
-			"wayfair.com",
+			"facebook.com",
 			80,
 			Dropped,
 		},
 		{
+			"z/a",
+			"business.facebook.com",
+			80,
+			Connected,
+		},
+		{
 			"y/b",
-			"facebook.com",
+			"wayfair.com",
 			80,
 			Connected,
 		},
 	}
-	_, err := k8sUtils.CreateOrUpdateACNP(builder.Get())
-	failOnError(err, t)
-	time.Sleep(networkPolicyDelay)
 	for _, tc := range testcases {
 		log.Tracef("Probing: %s -> %s", tc.clientPod.PodName(), tc.destAddr)
 		connectivity, err := k8sUtils.ProbeAddr(tc.clientPod.Namespace(), "pod", tc.clientPod.PodName(), tc.destAddr, tc.destPort, v1.ProtocolTCP)
@@ -2527,6 +2536,12 @@ func testFQDNPolicyInClusterService(t *testing.T) {
 		ipv6Svc.Spec.IPFamilies = []v1.IPFamily{v1.IPv6Protocol}
 		services = append(services, ipv6Svc)
 	}
+	if clusterInfo.podV6NetworkCIDR != "" && clusterInfo.podV4NetworkCIDR != "" {
+		dsSvc := k8sUtils.BuildService("ds-svc", "x", 80, 80, map[string]string{"pod": "c"}, nil)
+		dsSvc.Spec.ClusterIP = "None"
+		dsSvc.Spec.IPFamilies = []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol}
+		services = append(services, dsSvc)
+	}
 
 	for _, service := range services {
 		k8sUtils.CreateOrUpdateService(service)
@@ -2548,6 +2563,7 @@ func testFQDNPolicyInClusterService(t *testing.T) {
 	acnp := builder.Get()
 	k8sUtils.CreateOrUpdateACNP(acnp)
 	failOnError(waitForResourceReady(acnp, timeout), t)
+	time.Sleep(networkPolicyDelay)
 
 	var testcases []podToAddrTestStep
 	for _, service := range services {
