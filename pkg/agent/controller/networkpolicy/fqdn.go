@@ -325,6 +325,7 @@ func (f *fqdnController) deleteFQDNRule(ruleID string, fqdns []string) error {
 	f.deleteFQDNSelector(ruleID, fqdns)
 	return f.deleteRuleSelectedPods(ruleID)
 }
+
 func (f *fqdnController) deleteFQDNSelector(ruleID string, fqdns []string) {
 	f.fqdnSelectorMutex.Lock()
 	defer f.fqdnSelectorMutex.Unlock()
@@ -413,7 +414,6 @@ func (f *fqdnController) onDNSResponse(
 	f.fqdnSelectorMutex.Lock()
 	defer f.fqdnSelectorMutex.Unlock()
 	oldDNSMeta, exist := f.dnsEntryCache[fqdn]
-	klog.Infof("==============dnsEntryCache  %s", f.dnsEntryCache)
 	if exist {
 		mustCacheResponse = true
 		for ipStr := range responseIPs {
@@ -605,7 +605,6 @@ func (f *fqdnController) parseDNSResponse(msg *dns.Msg) (string, map[string]net.
 	if strings.HasSuffix(fqdn, ".") {
 		fqdn = fqdn[:len(fqdn)-1]
 	}
-	klog.Infof("==============parse DNS resp %s:%s", responseIPs)
 	return fqdn, responseIPs, lowestTTL, nil
 }
 
@@ -677,10 +676,10 @@ func (f *fqdnController) lookupIP(ctx context.Context, fqdn string) error {
 // makeDNSRequest makes a proactive query for a FQDN to the coreDNS service.
 func (f *fqdnController) makeDNSRequest(ctx context.Context, fqdn string) error {
 	if f.dnsServerAddr == "" {
-		klog.InfoS("No DNS server configured, falling back to local resolver")
+		klog.V(2).InfoS("No DNS server configured, falling back to local resolver")
 		return f.lookupIP(ctx, fqdn)
 	}
-	klog.InfoS("Making DNS request", "fqdn", fqdn, "dnsServer", f.dnsServerAddr)
+	klog.V(2).InfoS("Making DNS request", "fqdn", fqdn, "dnsServer", f.dnsServerAddr)
 	dnsClient := dns.Client{SingleInflight: true}
 	fqdnToQuery := fqdn
 	// The FQDN in the DNS request needs to end by a dot
@@ -767,13 +766,12 @@ func (f *fqdnController) handlePacketIn(pktIn *ofctrl.PacketIn) error {
 	}()
 	select {
 	case <-time.After(ruleRealizationTimeout):
-		klog.Infof("====fqdn rule sync timeout=======")
 		return fmt.Errorf("rules not synced within %v for DNS reply, dropping packet", ruleRealizationTimeout)
 	case err := <-waitCh:
 		if err != nil {
 			return fmt.Errorf("error when syncing up rules for DNS reply, dropping packet: %v", err)
 		}
-		klog.InfoS("Rule sync is successful or not needed, forwarding DNS response to Pod")
+		klog.V(2).InfoS("Rule sync is successful or not needed, forwarding DNS response to Pod")
 		return f.sendDNSPacketout(pktIn)
 	}
 }

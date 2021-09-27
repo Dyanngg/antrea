@@ -102,7 +102,7 @@ func (k *KubernetesUtils) probe(
 	ignoreCmd := []string{
 		"/bin/sh",
 		"-c",
-		fmt.Sprintf("/agnhost connect %s:%d --timeout=3s --protocol=%s", dstAddr, port, strings.ToLower(string(protocol))),
+		fmt.Sprintf("/agnhost connect %s:%d --timeout=1s --protocol=%s", dstAddr, port, strings.ToLower(string(protocol))),
 	}
 	k.runCommandFromPod(pod.Namespace, pod.Name, containerName, ignoreCmd)
 
@@ -115,28 +115,27 @@ func (k *KubernetesUtils) probe(
 	stdout, stderr, err := k.runCommandFromPod(pod.Namespace, pod.Name, containerName, cmd)
 	if err != nil {
 		// log this error as trace since may be an expected failure
-		log.Infof("%s -> %s: error when running command: err - %v /// stdout - %s /// stderr - %s", podName, dstName, err, stdout, stderr)
+		log.Tracef("%s -> %s: error when running command: err - %v /// stdout - %s /// stderr - %s", podName, dstName, err, stdout, stderr)
 		// do not return an error
 		return decideProbeResult(stderr, 3)
 	}
 	return Connected
 }
 
-// decideProbeResult ...
+// decideProbeResult uses the probe stderr to decide the connectivity.
 func decideProbeResult(stderr string, probeNum int) PodConnectivityMark {
-	resCount := map[PodConnectivityMark]int{
-		Connected: probeNum - strings.Count(stderr, "\n"),
-		Dropped:   strings.Count(stderr, "TIMEOUT"),
-		Rejected:  strings.Count(stderr, "REFUSED"),
-	}
-	log.Infof("%v", resCount)
-	if resCount[Rejected] == 0 && resCount[Connected] > 0 {
+
+	countConnected := probeNum - strings.Count(stderr, "\n")
+	countDropped := strings.Count(stderr, "TIMEOUT")
+	countRejected := strings.Count(stderr, "REFUSED") + strings.Count(stderr, "no route to host")
+
+	if countRejected == 0 && countConnected > 0 {
 		return Connected
 	}
-	if resCount[Connected] == 0 && resCount[Rejected] > 0 {
+	if countConnected == 0 && countRejected > 0 {
 		return Rejected
 	}
-	if resCount[Dropped] == probeNum {
+	if countDropped == probeNum {
 		return Dropped
 	}
 	return Error

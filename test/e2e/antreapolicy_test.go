@@ -103,7 +103,6 @@ func failOnError(err error, t *testing.T) {
 		k8sUtils.Cleanup(namespaces)
 		t.Fatalf("test failed: %v", err)
 	}
-	// net.DialTimeout()
 }
 
 func warningOnTimeoutError(err error, t *testing.T) {
