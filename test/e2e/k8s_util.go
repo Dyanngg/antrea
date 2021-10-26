@@ -99,23 +99,24 @@ func (k *KubernetesUtils) probe(
 	// until it is resolved, we try to connect 4 times. We ignore the first time result and use
 	// the last 3 times result to decide the connectivity.
 	// See https://github.com/antrea-io/antrea/issues/467.
-	ignoreCmd := []string{
-		"/bin/sh",
-		"-c",
-		fmt.Sprintf("/agnhost connect %s:%d --timeout=1s --protocol=%s", dstAddr, port, strings.ToLower(string(protocol))),
-	}
-	k.runCommandFromPod(pod.Namespace, pod.Name, containerName, ignoreCmd)
+
+	// ignoreCmd := []string{
+	// 	"/bin/sh",
+	// 	"-c",
+	// 	fmt.Sprintf("/agnhost connect %s:%d --timeout=1s --protocol=%s", dstAddr, port, strings.ToLower(string(protocol))),
+	// }
+	// k.runCommandFromPod(pod.Namespace, pod.Name, containerName, ignoreCmd)
 
 	cmd := []string{
 		"/bin/sh",
 		"-c",
-		fmt.Sprintf("for i in $(seq 1 3); do /agnhost connect %s:%d --timeout=2s --protocol=%s; done;", dstAddr, port, strings.ToLower(string(protocol))),
+		fmt.Sprintf("for i in $(seq 1 3); do /agnhost connect %s:%d --timeout=1s --protocol=%s; done;", dstAddr, port, strings.ToLower(string(protocol))),
 	}
-	log.Tracef("Running: kubectl exec %s -c %s -n %s -- %s", pod.Name, containerName, pod.Namespace, strings.Join(cmd, " "))
+	log.Infof("Running: kubectl exec %s -c %s -n %s -- %s", pod.Name, containerName, pod.Namespace, strings.Join(cmd, " "))
 	stdout, stderr, err := k.runCommandFromPod(pod.Namespace, pod.Name, containerName, cmd)
 	if err != nil {
 		// log this error as trace since may be an expected failure
-		log.Tracef("%s -> %s: error when running command: err - %v /// stdout - %s /// stderr - %s", podName, dstName, err, stdout, stderr)
+		log.Infof("%s -> %s: error when running command: err - %v /// stdout - %s /// stderr - %s", podName, dstName, err, stdout, stderr)
 		// do not return an error
 		return decideProbeResult(stderr, 3)
 	}

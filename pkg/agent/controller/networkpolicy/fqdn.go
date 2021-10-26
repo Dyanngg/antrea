@@ -501,8 +501,9 @@ func (f *fqdnController) syncDirtyRules(fqdn string, waitCh chan error, addressU
 			dirtyRules = f.ruleSyncTracker.dirtyRules.Intersection(dirtyRules)
 		}
 		if len(dirtyRules) > 0 {
-			klog.V(4).InfoS("Dirty rules blocking packetOut", "dirtyRules", dirtyRules)
+			klog.InfoS("Dirty rules blocking packetOut", "dirtyRules", dirtyRules)
 			f.ruleSyncTracker.subscribe(waitCh, dirtyRules)
+			klog.InfoS("New subscriber added", "dirtyRules", dirtyRules)
 			for r := range dirtyRules {
 				f.dirtyRuleHandler(r)
 			}
@@ -534,6 +535,7 @@ func (rst *ruleSyncTracker) Run(stopCh <-chan struct{}) {
 			return
 		case update := <-rst.updateCh:
 			rst.mutex.Lock()
+			klog.InfoS("rst update signal received from channel", "ruleID", update.ruleId)
 			if subscribers, ok := rst.ruleToSubscribers[update.ruleId]; ok {
 				for _, s := range subscribers {
 					if update.err != nil {

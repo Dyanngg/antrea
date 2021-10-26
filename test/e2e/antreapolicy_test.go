@@ -3034,6 +3034,31 @@ func TestAntreaPolicy(t *testing.T) {
 		t.Run("Case=FQDNPolicyInCluster", func(t *testing.T) { testFQDNPolicyInClusterService(t) })
 		t.Run("Case=ACNPToServices", func(t *testing.T) { testToServices(t) })
 	})
+
+	t.Run("TestFQDNFlaky", func(t *testing.T) {
+		t.Run("Case=ACNPFQDNPolicy0", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy1", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy2", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy3", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy4", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy5", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy6", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy7", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy8", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy9", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy10", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy11", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy12", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy13", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy14", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy15", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy16", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy17", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy18", func(t *testing.T) { testFQDNPolicy(t) })
+		t.Run("Case=ACNPFQDNPolicy19", func(t *testing.T) { testFQDNPolicy(t) })
+
+	})
+
 	// print results for reachability tests
 	printResults()
 
