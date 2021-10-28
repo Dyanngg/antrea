@@ -94,7 +94,7 @@ function start_ovs {
         # datapath flow cache faster, so that Service SessionAffinity "takes effect"
         # faster in AntreaProxy. It should not have a significant impact on performance.
         # See https://github.com/antrea-io/antrea/issues/1583
-        ovs-vsctl --no-wait set open_vswitch . other_config:max-revalidator=200
+        ovs-vsctl --no-wait set open_vswitch . other_config:max-revalidator=10
         /usr/share/openvswitch/scripts/ovs-ctl --no-ovsdb-server --system-id=random start --db-file=$OVS_DB_FILE
         log_info $CONTAINER_NAME "Started ovs-vswitchd"
     fi

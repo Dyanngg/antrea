@@ -57,7 +57,7 @@ func TestAddFQDNRule(t *testing.T) {
 	tests := []struct {
 		name                       string
 		existingSelectorToRuleIDs  map[fqdnSelectorItem]sets.String
-		existingDNSCache           map[string]dnsMeta
+		existingDNSCache           map[string]map[dnsQueryScope]dnsMeta
 		existingFQDNToSelectorItem map[string]map[fqdnSelectorItem]struct{}
 		ruleID                     string
 		fqdns                      []string
@@ -89,7 +89,7 @@ func TestAddFQDNRule(t *testing.T) {
 			map[fqdnSelectorItem]sets.String{
 				selectorItem1: sets.NewString("mockRule1"),
 			},
-			map[string]dnsMeta{
+			map[string]map[dnsQueryScope]dnsMeta{
 				"test.antrea.io": {},
 			},
 			map[string]map[fqdnSelectorItem]struct{}{
@@ -157,7 +157,7 @@ func TestDeleteFQDNRule(t *testing.T) {
 	tests := []struct {
 		name                    string
 		previouslyAddedRules    []fqdnRuleAddArgs
-		existingDNSCache        map[string]dnsMeta
+		existingDNSCache        map[string]map[dnsQueryScope]dnsMeta
 		ruleID                  string
 		fqdns                   []string
 		finalSelectorToRuleIDs  map[fqdnSelectorItem]sets.String
@@ -173,7 +173,7 @@ func TestDeleteFQDNRule(t *testing.T) {
 					sets.NewInt32(1),
 				},
 			},
-			map[string]dnsMeta{
+			map[string]map[dnsQueryScope]dnsMeta{
 				"test.antrea.io": {},
 			},
 			"mockRule1",
@@ -196,7 +196,7 @@ func TestDeleteFQDNRule(t *testing.T) {
 					sets.NewInt32(2),
 				},
 			},
-			map[string]dnsMeta{
+			map[string]map[dnsQueryScope]dnsMeta{
 				"test.antrea.io": {},
 			},
 			"mockRule1",
@@ -225,7 +225,7 @@ func TestDeleteFQDNRule(t *testing.T) {
 					sets.NewInt32(2),
 				},
 			},
-			map[string]dnsMeta{
+			map[string]map[dnsQueryScope]dnsMeta{
 				"test.antrea.io": {},
 			},
 			"mockRule1",
@@ -254,7 +254,7 @@ func TestDeleteFQDNRule(t *testing.T) {
 					sets.NewInt32(2),
 				},
 			},
-			map[string]dnsMeta{
+			map[string]map[dnsQueryScope]dnsMeta{
 				"test.antrea.io":  {},
 				"maps.google.com": {},
 			},
@@ -300,6 +300,6 @@ func TestLookupIPFallback(t *testing.T) {
 	defer cancel()
 	// not ideal as a unit test because it requires the ability to resolve
 	// DNS names, but we don't expect this to be an actual problem.
-	err := f.lookupIP(ctx, "www.google.com")
+	err := f.lookupIP(ctx, "www.google.com", dnsScopeDualStack)
 	require.NoError(t, err, "Error when resolving name")
 }
