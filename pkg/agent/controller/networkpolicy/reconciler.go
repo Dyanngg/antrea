@@ -526,7 +526,9 @@ func (r *reconciler) computeOFRulesForAdd(rule *CompletedRule, ofPriority *uint1
 			if r.fqdnController != nil && len(rule.To.FQDNs) > 0 {
 				var addresses []types.Address
 				addressSet := sets.NewString()
-				matchedIPs := r.fqdnController.getIPsForFQDNSelectors(rule.To.FQDNs)
+				klog.Infof("Getting IPs for FQDN %v when updating rule %s", rule.To.FQDNs, rule.ID)
+				matchedIPs := r.fqdnController.getIPsForFQDNSelectors(rule.To.FQDNs, rule.ID)
+				klog.Infof("Retrieved IPs are %v", matchedIPs)
 				for _, ipAddr := range matchedIPs {
 					addresses = append(addresses, openflow.NewIPAddress(ipAddr))
 					addressSet.Insert(ipAddr.String())
@@ -707,7 +709,9 @@ func (r *reconciler) update(lastRealized *lastRealized, newRule *CompletedRule, 
 						originalFQDNAddressSet = lastRealized.fqdnIPAddresses
 					}
 					if svcKey == originalSvcKey && len(newRule.To.FQDNs) > 0 {
-						matchedIPs := r.fqdnController.getIPsForFQDNSelectors(newRule.To.FQDNs)
+						klog.Infof("Getting IPs for FQDN %v when updating rule %s", newRule.To.FQDNs, newRule.ID)
+						matchedIPs := r.fqdnController.getIPsForFQDNSelectors(newRule.To.FQDNs, newRule.ID)
+						klog.Infof("Retrieved IPs are %v", matchedIPs)
 						for _, ipAddr := range matchedIPs {
 							newFQDNAddressSet.Insert(ipAddr.String())
 						}
