@@ -16,6 +16,7 @@ package networkpolicy
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -27,10 +28,10 @@ import (
 	openflowtest "antrea.io/antrea/pkg/agent/openflow/testing"
 )
 
-func newMockFQDNController(t *testing.T, controller *gomock.Controller, dnsServer *string) (*fqdnController, *openflowtest.MockClient) {
+func newMockFQDNController(t *testing.T, controller *gomock.Controller, ipv6Enabled bool, dnsServer *string) (*fqdnController, *openflowtest.MockClient) {
 	mockOFClient := openflowtest.NewMockClient(controller)
 	mockOFClient.EXPECT().IsIPv4Enabled().Return(true).AnyTimes()
-	mockOFClient.EXPECT().IsIPv6Enabled().Return(false).AnyTimes()
+	mockOFClient.EXPECT().IsIPv6Enabled().Return(ipv6Enabled).AnyTimes()
 	mockOFClient.EXPECT().NewDNSpacketInConjunction(gomock.Any()).Return(nil).AnyTimes()
 	dirtyRuleHandler := func(rule string) {}
 	dnsServerAddr := "8.8.8.8:53" // dummy DNS server, will not be used since we don't send any request in these tests
@@ -117,7 +118,7 @@ func TestAddFQDNRule(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
 			defer controller.Finish()
-			f, c := newMockFQDNController(t, controller, nil)
+			f, c := newMockFQDNController(t, controller, false, nil)
 			if tt.addressAdded {
 				c.EXPECT().AddAddressToDNSConjunction(dnsInterceptRuleID, gomock.Any()).Times(1)
 			}
@@ -275,7 +276,7 @@ func TestDeleteFQDNRule(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
 			defer controller.Finish()
-			f, c := newMockFQDNController(t, controller, nil)
+			f, c := newMockFQDNController(t, controller, false, nil)
 			c.EXPECT().AddAddressToDNSConjunction(dnsInterceptRuleID, gomock.Any()).Times(len(tt.previouslyAddedRules))
 			f.dnsEntryCache = tt.existingDNSCache
 			if tt.addressRemoved {
@@ -295,11 +296,63 @@ func TestLookupIPFallback(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	dnsServer := "" // force a fallback to local resolver
-	f, _ := newMockFQDNController(t, controller, &dnsServer)
+	f, _ := newMockFQDNController(t, controller, false, &dnsServer)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// not ideal as a unit test because it requires the ability to resolve
 	// DNS names, but we don't expect this to be an actual problem.
 	err := f.lookupIP(ctx, "www.google.com", dnsScopeDualStack)
 	require.NoError(t, err, "Error when resolving name")
+}
+
+func TestDualStackGetIPForSelectors(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	f, _ := newMockFQDNController(t, controller, true, nil)
+	testFQDNSelector := fqdnSelectorItem{
+		matchRegex: "^.*antrea[.]io$",
+	}
+	f.dnsEntryCache = map[string]map[dnsQueryScope]dnsMeta{
+		"test.antrea.io": {},
+	}
+	f.fqdnToSelectorItem = map[string]map[fqdnSelectorItem]struct{}{
+		"test.antrea.io": {
+			testFQDNSelector: struct {}{},
+		},
+	}
+	f.selectorItemToFQDN = map[fqdnSelectorItem]sets.String{
+		testFQDNSelector: sets.NewString("test.antrea.io"),
+	}
+	f.selectorItemToRuleIDs = map[fqdnSelectorItem]sets.String{
+		testFQDNSelector: sets.NewString("r1"),
+	}
+	waitChPkt1, waitChPkt2 := make(chan error, 1), make(chan error, 1)
+	ipv4Address1, _, _ := net.ParseCIDR("10.0.0.1/32")
+	ipv4Address2, _, _ := net.ParseCIDR("10.0.0.2/32")
+	ipv6Address, _, _ := net.ParseCIDR("2001:db8:3333:4444:5555:6666:7777:8888/128")
+	responseV4IPs1 := map[string]net.IP{"10.0.0.1": ipv4Address1}
+	responseV4IPs2 := map[string]net.IP{"10.0.0.2": ipv4Address2}
+	responseV6IPs := map[string]net.IP{"2001:db8:3333:4444:5555:6666:7777:8888": ipv6Address}
+
+	f.onDNSResponse("test.antrea.io", dnsScopeIPv4, responseV4IPs1, 1, time.Now(), waitChPkt1)
+	// This simulates the reconciler, in reconciling a dirty rule r1 (which selects the fqdn test.antrea.io),
+	// tries to retrieve the latest IPs corresponding to that FQDN.
+	ip1 := f.getIPsForFQDNSelectors([]string{"*antrea.io"})
+	assert.Equal(t, []net.IP{ipv4Address1}, ip1)
+	f.ruleSyncTracker.dirtyRules = sets.NewString()
+
+	f.onDNSResponse("test.antrea.io", dnsScopeIPv6, responseV6IPs, 1, time.Now(), waitChPkt2)
+	ip2 := f.getIPsForFQDNSelectors([]string{"*antrea.io"})
+	assert.Equal(t, []net.IP{ipv4Address1, ipv6Address}, ip2)
+	f.ruleSyncTracker.dirtyRules = sets.NewString()
+
+	time.Sleep(time.Second)
+	f.onDNSResponse("test.antrea.io", dnsScopeIPv6, responseV6IPs, 1, time.Now(), waitChPkt1)
+	ip3 := f.getIPsForFQDNSelectors([]string{"*antrea.io"})
+	assert.Equal(t, []net.IP{ipv4Address1, ipv6Address}, ip3)
+	f.ruleSyncTracker.dirtyRules = sets.NewString()
+
+	f.onDNSResponse("test.antrea.io", dnsScopeIPv4, responseV4IPs2, 1, time.Now(), waitChPkt2)
+	ip4 := f.getIPsForFQDNSelectors([]string{"*antrea.io"})
+	assert.ElementsMatch(t, []net.IP{ipv4Address2, ipv6Address}, ip4)
 }

@@ -88,7 +88,7 @@ type dnsMeta struct {
 	responseIPs map[string]net.IP
 }
 
-// subscriber is a entity that subsribes for datapath rule realization
+// subscriber is an entity that subsribes for datapath rule realization
 // results of a specific FQDN. It is needed in case of DNS query interception:
 // the fqdnController needs to make sure that all fqdn rules that DNS
 // query affects is realized, before sending the DNS query back to the
@@ -96,7 +96,6 @@ type dnsMeta struct {
 type subscriber struct {
 	waitCh           chan error
 	rulesToSyncCount int
-	addressRead      bool
 }
 
 // ruleRealizationUpdate is a rule realization result reported by policy
@@ -118,7 +117,7 @@ type ruleSyncTracker struct {
 	// which the rule entry is deleted from ruleToSubscribers.
 	ruleToSubscribers map[string][]*subscriber
 	// dirtyRules is collection of dirty rule IDs to be synced. Once the rule sync is
-	// successful, its ID is removed from this set. Otherwise it will stay in the
+	// successful, its ID is removed from this set. Otherwise, it will stay in the
 	// dirtyRules set. This is to ensure that the fqdnController does not send
 	// DNS response which has a fqdn rule that previously failed to realize.
 	dirtyRules sets.String
@@ -237,16 +236,9 @@ func (f *fqdnController) setFQDNMatchSelector(fqdn string, selectorItem fqdnSele
 
 // getIPsForFQDNSelectors retrieves the current IP addresses cached for FQDNs that
 // matches the selection criteria of a v1beta2.FQDN selector.
-func (f *fqdnController) getIPsForFQDNSelectors(fqdns []string, ruleId string) []net.IP {
+func (f *fqdnController) getIPsForFQDNSelectors(fqdns []string) []net.IP {
 	f.fqdnSelectorMutex.Lock()
 	defer f.fqdnSelectorMutex.Unlock()
-	f.ruleSyncTracker.mutex.Lock()
-	defer f.ruleSyncTracker.mutex.Unlock()
-	if subscribers, ok := f.ruleSyncTracker.ruleToSubscribers[ruleId]; ok {
-		for _, s := range subscribers {
-			s.addressRead = true
-		}
-	}
 	var matchedIPs []net.IP
 	for _, fqdn := range fqdns {
 		fqdnSelectorItem := fqdnToSelectorItem(fqdn)
@@ -443,8 +435,8 @@ func (f *fqdnController) onDNSResponse(
 			}
 			for oldIPStr, oldIP := range oldDNSMeta.responseIPs {
 				if _, ok := responseIPs[oldIPStr]; !ok {
-					if oldDNSMeta.expirationTime.Before(time.Now()) {
-						// This IP entry has already expired and not seen in the latest DNS response.
+					if oldDNSMeta.expirationTime.Before(time.Now().Add(time.Second)) {
+						// This IP entry has already expired (with a 1s buffer) and not seen in the latest DNS response.
 						// It should be removed from the cache.
 						addressUpdate = true
 					} else {
@@ -545,7 +537,7 @@ func (f *fqdnController) syncDirtyRules(fqdn string, waitCh chan error, addressU
 // dirty rule count of each subscriber of that rule by one, if the rule is
 // successfully reconciled.
 func (rst *ruleSyncTracker) subscribe(waitCh chan error, dirtyRules sets.String) {
-	subscriber := &subscriber{waitCh, len(dirtyRules), false}
+	subscriber := &subscriber{waitCh, len(dirtyRules)}
 	rst.mutex.Lock()
 	defer rst.mutex.Unlock()
 	rst.dirtyRules = rst.dirtyRules.Union(dirtyRules)
@@ -574,11 +566,9 @@ func (rst *ruleSyncTracker) Run(stopCh <-chan struct{}) {
 						// An error should already been pushed to the waitCh of this subscriber.
 						continue
 					}
-					if s.addressRead == true {
-						s.rulesToSyncCount--
-					}
+					s.rulesToSyncCount--
 					if s.rulesToSyncCount == 0 {
-						// All dirty rules for that subscriber have been processed successfully.
+						// All dirty rules for that subscriber has been processed successfully.
 						klog.InfoS("Unblocking packetOut")
 						s.waitCh <- nil
 					}
