@@ -80,6 +80,7 @@ func (r *ResourceExportReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	klog.Infof("Runnig the latest code")
 	switch resExport.Spec.Kind {
 	case common.ServiceKind:
 		klog.V(2).InfoS("Reconciling Service type of ResourceExport", "resourceexport", req.NamespacedName)
