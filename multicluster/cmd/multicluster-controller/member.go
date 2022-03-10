@@ -50,6 +50,7 @@ func newMemberCommand() *cobra.Command {
 }
 
 func runMember(o *Options) error {
+	klog.Infof("Member is running the latest dev changes")
 	mgr, err := setupManagerAndCertController(o)
 	if err != nil {
 		return err

@@ -50,6 +50,7 @@ func newLeaderCommand() *cobra.Command {
 }
 
 func runLeader(o *Options) error {
+	klog.Infof("Leader is running the latest dev changes")
 	// on the leader we want the reconciler to run for a given Namespace instead of cluster scope
 	o.options.Namespace = env.GetPodNamespace()
 	stopCh := signals.RegisterSignalHandlers()

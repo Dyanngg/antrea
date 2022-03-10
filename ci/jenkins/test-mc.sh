@@ -24,7 +24,7 @@ DEFAULT_WORKDIR="/var/lib/jenkins"
 WORKDIR=$DEFAULT_WORKDIR
 TESTCASE=""
 TEST_FAILURE=false
-DOCKER_REGISTRY=$(head -n1 "${WORKSPACE}/ci/docker-registry")
+DOCKER_REGISTRY=$(head -n1 "/var/lib/jenkins/antrea/ci/docker-registry")
 MULTICLUSTER_KUBECONFIG_PATH=$WORKDIR/.kube
 LEADER_CLUSTER_CONFIG="--kubeconfig=$MULTICLUSTER_KUBECONFIG_PATH/leader"
 EAST_CLUSTER_CONFIG="--kubeconfig=$MULTICLUSTER_KUBECONFIG_PATH/east"
@@ -144,11 +144,11 @@ function cleanup_multicluster_ns {
 function cleanup_multicluster_controller {
     echo "====== Cleanup Multicluster Controller Installation ======"
     kubeconfig=$1
-    for multicluster_yml in ${WORKSPACE}/multicluster/test/yamls/*.yml; do
+    for multicluster_yml in /var/lib/jenkins/antrea/multicluster/test/yamls/*.yml; do
         kubectl delete -f $multicluster_yml $kubeconfig --ignore-not-found=true  --timeout=30s || true
     done
 
-    for multicluster_yml in ${WORKSPACE}/multicluster/build/yamls/*.yml; do
+    for multicluster_yml in /var/lib/jenkins/antrea/multicluster/build/yamls/*.yml; do
         kubectl delete -f $multicluster_yml $kubeconfig --ignore-not-found=true --timeout=30s || true
     done
 }
@@ -415,13 +415,13 @@ EOF
         options+=" --provider kind"
     fi
 
-    set -x
-    go test -v antrea.io/antrea/multicluster/test/e2e --logs-export-dir `pwd`/antrea-multicluster-test-logs $options
-    if [[ "$?" != "0" ]]; then
-        TEST_FAILURE=true
-    fi
-    set +x
-    set -e
+#    set -x
+#    go test -v antrea.io/antrea/multicluster/test/e2e --logs-export-dir `pwd`/antrea-multicluster-test-logs $options
+#    if [[ "$?" != "0" ]]; then
+#        TEST_FAILURE=true
+#    fi
+#    set +x
+#    set -e
 }
 
 function collect_coverage {
@@ -440,9 +440,9 @@ function collect_coverage {
     done
 }
 
-trap clean_multicluster EXIT
-clean_tmp
-clean_images
+#trap clean_multicluster EXIT
+#clean_tmp
+#clean_images
 
 if [[ ${KIND} == "true" ]]; then
     # Preparing a ClusterSet contains three Kind clusters.
