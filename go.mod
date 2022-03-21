@@ -33,7 +33,7 @@ require (
 	github.com/mdlayher/raw v0.0.0-20211126142749-4eae47f3d54b
 	github.com/miekg/dns v1.1.43
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
-	github.com/onsi/ginkgo v1.16.4
+	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.13.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.11.0
