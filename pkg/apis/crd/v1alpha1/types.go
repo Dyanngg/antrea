@@ -486,6 +486,10 @@ type NetworkPolicyPeer struct {
 	// Cannot be set with any other selector.
 	// +optional
 	Service *NamespacedName `json:"service,omitempty"`
+	// Define scope of the Pod/NamespaceSelector(s) of this peer.
+	// Can only be used in ingress NetworkPolicyPeers.
+	// +optional
+	Scope PeerClusterScope `json:"scope,omitempty"`
 }
 
 type PeerNamespaces struct {
@@ -497,6 +501,13 @@ type NamespaceMatchType string
 
 const (
 	NamespaceMatchSelf NamespaceMatchType = "Self"
+)
+
+type PeerClusterScope string
+
+const (
+	ScopeCluster    PeerClusterScope = "Cluster"
+	ScopeClusterSet PeerClusterScope = "ClusterSet"
 )
 
 // IPBlock describes a particular CIDR (Ex. "192.168.1.1/24") that is allowed

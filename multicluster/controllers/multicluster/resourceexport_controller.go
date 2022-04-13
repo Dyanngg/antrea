@@ -89,6 +89,8 @@ func (r *ResourceExportReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		klog.V(2).InfoS("Reconciling AntreaClusterNetworkPolicy type of ResourceExport", "resourceexport", req.NamespacedName)
 	case common.ClusterInfoKind:
 		return r.handleClusterInfo(ctx, req, resExport)
+	case common.LabelIdentityKind:
+		return ctrl.Result{}, nil
 	default:
 		klog.InfoS("It's not expected kind, skip reconciling ResourceExport", "resourceexport", req.NamespacedName)
 		return ctrl.Result{}, nil

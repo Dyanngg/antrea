@@ -37,6 +37,14 @@ func (c *FakeMulticlusterV1alpha1) Gateways(namespace string) v1alpha1.GatewayIn
 	return &FakeGateways{c, namespace}
 }
 
+func (c *FakeMulticlusterV1alpha1) LabelIdentities() v1alpha1.LabelIdentityInterface {
+	return &FakeLabelIdentities{c}
+}
+
+func (c *FakeMulticlusterV1alpha1) LabelIdentityImports() v1alpha1.LabelIdentityImportInterface {
+	return &FakeLabelIdentityImports{c}
+}
+
 func (c *FakeMulticlusterV1alpha1) MemberClusterAnnounces(namespace string) v1alpha1.MemberClusterAnnounceInterface {
 	return &FakeMemberClusterAnnounces{c, namespace}
 }

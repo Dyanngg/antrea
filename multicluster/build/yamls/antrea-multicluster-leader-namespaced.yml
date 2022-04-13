@@ -262,6 +262,27 @@ rules:
   - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  labels:
+    app: antrea
+  name: antrea-multicluster-antrea-mc-labelidentityimport-role
+rules:
+- apiGroups:
+  - multicluster.crd.antrea.io
+  resources:
+  - labelidentityimports
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
@@ -306,6 +327,24 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: antrea-mc-controller
+  namespace: antrea-multicluster
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app: antrea
+  name: antrea-multicluster-antrea-mc-labelidentityimport-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: antrea-multicluster-antrea-mc-labelidentityimport-role
+subjects:
+- kind: ServiceAccount
+  name: antrea-mc-controller
+  namespace: antrea-multicluster
+- kind: ServiceAccount
+  name: antrea-mc-member-access-sa
   namespace: antrea-multicluster
 ---
 apiVersion: v1

@@ -28,6 +28,8 @@ type MulticlusterV1alpha1Interface interface {
 	ClusterInfoImportsGetter
 	ClusterSetsGetter
 	GatewaysGetter
+	LabelIdentitiesGetter
+	LabelIdentityImportsGetter
 	MemberClusterAnnouncesGetter
 	ResourceExportsGetter
 	ResourceImportsGetter
@@ -48,6 +50,14 @@ func (c *MulticlusterV1alpha1Client) ClusterSets(namespace string) ClusterSetInt
 
 func (c *MulticlusterV1alpha1Client) Gateways(namespace string) GatewayInterface {
 	return newGateways(c, namespace)
+}
+
+func (c *MulticlusterV1alpha1Client) LabelIdentities() LabelIdentityInterface {
+	return newLabelIdentities(c)
+}
+
+func (c *MulticlusterV1alpha1Client) LabelIdentityImports() LabelIdentityImportInterface {
+	return newLabelIdentityImports(c)
 }
 
 func (c *MulticlusterV1alpha1Client) MemberClusterAnnounces(namespace string) MemberClusterAnnounceInterface {

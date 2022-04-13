@@ -39,6 +39,10 @@ type ExternalEntityExport struct {
 	ExternalEntitySpec v1alpha2.ExternalEntitySpec `json:"externalentityspec,omitempty"`
 }
 
+type LabelIdentityExport struct {
+	NormalizedLabels []string `json:"normalizedLabels,omitempty"`
+}
+
 // RawResourceExport exports opaque resources.
 type RawResourceExport struct {
 	Data []byte `json:"data,omitempty"`
@@ -65,6 +69,8 @@ type ResourceExportSpec struct {
 	ExternalEntity *ExternalEntityExport `json:"externalentity,omitempty"`
 	// If exported resource is AntreaClusterNetworkPolicy.
 	ClusterNetworkPolicy *v1alpha1.ClusterNetworkPolicySpec `json:"clusternetworkpolicy,omitempty"`
+	// If exported resource is LabelIdentities of a cluster.
+	LabelIdentities *LabelIdentityExport `json:"labelIdentities,omitempty"`
 	// If exported resource kind is unknown.
 	Raw *RawResourceExport `json:"raw,omitempty"`
 }

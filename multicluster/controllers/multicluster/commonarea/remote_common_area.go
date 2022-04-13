@@ -381,10 +381,21 @@ func (r *remoteCommonArea) StartWatching() error {
 		r.localNamespace,
 		r,
 	)
-
 	if err := resImportReconciler.SetupWithManager(r.ClusterManager); err != nil {
 		klog.V(2).ErrorS(err, "Error creating ResourceImport controller for RemoteCommonArea", "cluster", r.ClusterID)
 		return fmt.Errorf("error creating ResourceImport controller for RemoteCommonArea: %v", err)
+	}
+	labelIdentityImpReconciler := NewLabelIdentityImportReconciler(
+		r.ClusterManager.GetClient(),
+		r.ClusterManager.GetScheme(),
+		r.localClusterClient,
+		string(r.remoteCommonAreaManager.GetLocalClusterID()),
+		r.remoteCommonAreaManager.GetNamespace(),
+		r,
+	)
+	if err := labelIdentityImpReconciler.SetupWithManager(r.ClusterManager); err != nil {
+		klog.V(2).ErrorS(err, "Error creating LabelIdentityImport controller for RemoteCommonArea", "Cluster", r.ClusterID)
+		return fmt.Errorf("error creating LabelIdentityImport controller for RemoteCommonArea: %v", err)
 	}
 
 	go func() {
