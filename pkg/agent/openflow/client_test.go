@@ -84,22 +84,30 @@ func installPodFlows(ofClient Client, cacheKey string) (int, error) {
 	ofPort := uint32(10)
 	err := ofClient.InstallPodFlows(containerID, []net.IP{podIP}, podMAC, ofPort, 0)
 	client := ofClient.(*client)
+	flowNum := 0
 	fCacheI, ok := client.featurePodConnectivity.podCachedFlows.Load(containerID)
 	if ok {
-		return len(fCacheI.(flowCache)), err
+		flowNum += len(fCacheI.(flowCache))
 	}
-	return 0, err
+	// When multi-cluster is enabled, classifier flows of Pods will have different cache keys.
+	fCacheIC, ok := client.featurePodConnectivity.podCachedFlows.Load(containerID + "/classifier")
+	if ok {
+		flowNum += len(fCacheIC.(flowCache))
+	}
+	return flowNum, err
 }
 
 // TestIdempotentFlowInstallation checks that InstallNodeFlows and InstallPodFlows are idempotent.
 func TestIdempotentFlowInstallation(t *testing.T) {
 	testCases := []struct {
-		name      string
-		cacheKey  string
-		numFlows  int
-		installFn func(ofClient Client, cacheKey string) (int, error)
+		name               string
+		cacheKey           string
+		enableMultiCluster bool
+		numFlows           int
+		installFn          func(ofClient Client, cacheKey string) (int, error)
 	}{
-		{"PodFlows", "aaaa-bbbb-cccc-dddd", 5, installPodFlows},
+		{"PodFlows", "aaaa-bbbb-cccc-dddd", false, 5, installPodFlows},
+		{"MCPodFlows", "eeee-ffff-gggg-hhhh", true, 5, installPodFlows},
 	}
 
 	// Check the flows are installed only once even though InstallNodeFlows/InstallPodFlows is called multiple times.
@@ -109,7 +117,7 @@ func TestIdempotentFlowInstallation(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			m := oftest.NewMockOFEntryOperations(ctrl)
-			ofClient := NewClient(bridgeName, bridgeMgmtAddr, true, false, false, false, false, false, false, false, false)
+			ofClient := NewClient(bridgeName, bridgeMgmtAddr, true, false, false, false, false, false, false, false, tc.enableMultiCluster)
 			client := ofClient.(*client)
 			client.cookieAllocator = cookie.NewAllocator(0)
 			client.ofEntryOperations = m
@@ -120,7 +128,11 @@ func TestIdempotentFlowInstallation(t *testing.T) {
 			client.ipProtocols = []binding.Protocol{binding.ProtocolIP}
 			client.generatePipelines()
 
-			m.EXPECT().AddAll(gomock.Any()).Return(nil).Times(1)
+			addAllCallTimes := 1
+			if tc.enableMultiCluster {
+				addAllCallTimes = 2
+			}
+			m.EXPECT().AddAll(gomock.Any()).Return(nil).Times(addAllCallTimes)
 			// Installing the flows should succeed, and all the flows should be added into the cache.
 			numCached1, err := tc.installFn(ofClient, tc.cacheKey)
 			require.Nil(t, err, "Error when installing Node flows")
@@ -142,7 +154,7 @@ func TestIdempotentFlowInstallation(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			m := oftest.NewMockOFEntryOperations(ctrl)
-			ofClient := NewClient(bridgeName, bridgeMgmtAddr, true, false, false, false, false, false, false, false, false)
+			ofClient := NewClient(bridgeName, bridgeMgmtAddr, true, false, false, false, false, false, false, false, tc.enableMultiCluster)
 			client := ofClient.(*client)
 			client.cookieAllocator = cookie.NewAllocator(0)
 			client.ofEntryOperations = m
@@ -154,7 +166,11 @@ func TestIdempotentFlowInstallation(t *testing.T) {
 			client.generatePipelines()
 
 			errorCall := m.EXPECT().AddAll(gomock.Any()).Return(errors.New("Bundle error")).Times(1)
-			m.EXPECT().AddAll(gomock.Any()).Return(nil).After(errorCall)
+			addAllCallTimes := 1
+			if tc.enableMultiCluster {
+				addAllCallTimes = 2
+			}
+			m.EXPECT().AddAll(gomock.Any()).Return(nil).After(errorCall).Times(addAllCallTimes)
 
 			// Installing the flows failed at the first time, and no flow cache is created.
 			numCached1, err := tc.installFn(ofClient, tc.cacheKey)

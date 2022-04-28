@@ -1006,6 +1006,20 @@ func (mr *MockClientMockRecorder) UninstallVMUplinkFlows(arg0 interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UninstallVMUplinkFlows", reflect.TypeOf((*MockClient)(nil).UninstallVMUplinkFlows), arg0)
 }
 
+// UpdatePodClassifierFlowsWithNewLabelID mocks base method
+func (m *MockClient) UpdatePodClassifierFlowsWithNewLabelID(arg0 string, arg1, arg2 uint32, arg3 []net.IP) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatePodClassifierFlowsWithNewLabelID", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdatePodClassifierFlowsWithNewLabelID indicates an expected call of UpdatePodClassifierFlowsWithNewLabelID
+func (mr *MockClientMockRecorder) UpdatePodClassifierFlowsWithNewLabelID(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePodClassifierFlowsWithNewLabelID", reflect.TypeOf((*MockClient)(nil).UpdatePodClassifierFlowsWithNewLabelID), arg0, arg1, arg2, arg3)
+}
+
 // MockOFEntryOperations is a mock of OFEntryOperations interface
 type MockOFEntryOperations struct {
 	ctrl     *gomock.Controller

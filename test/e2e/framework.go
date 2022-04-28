@@ -1290,6 +1290,24 @@ func (b *PodBuilder) Create(data *TestData) error {
 	return nil
 }
 
+func (data *TestData) UpdatePod(namespace, name string, mutateFunc func(*corev1.Pod)) error {
+	pod, err := data.clientset.CoreV1().Pods(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("error when updating '%s/%s' Pod: %v", namespace, name, err)
+	}
+	if mutateFunc != nil {
+		mutateFunc(pod)
+	}
+	if pod, err := data.clientset.CoreV1().Pods(namespace).Update(context.TODO(), pod, metav1.UpdateOptions{}); err != nil {
+		// Check Pod phase
+		if pod.Status.Phase == corev1.PodFailed {
+			return fmt.Errorf("error when updating '%s/%s' Pod: Pod is in 'Failed' phase", namespace, name)
+		}
+		return fmt.Errorf("error when updating '%s/%s' Pod: %v", namespace, name, err)
+	}
+	return nil
+}
+
 // createBusyboxPodOnNode creates a Pod in the test namespace with a single busybox container. The
 // Pod will be scheduled on the specified Node (if nodeName is not empty).
 func (data *TestData) createBusyboxPodOnNode(name string, ns string, nodeName string, hostNetwork bool) error {

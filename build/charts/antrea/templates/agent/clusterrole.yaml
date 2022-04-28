@@ -199,6 +199,7 @@ rules:
     - multicluster.crd.antrea.io
     resources:
     - clusterinfoimports
+    - labelidentities
     verbs:
     - get
     - list

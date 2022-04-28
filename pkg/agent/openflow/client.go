@@ -356,6 +356,9 @@ type Client interface {
 	// or ip, port, protocol and direction. It is used to bypass NetworkPolicy enforcement on a VM for the particular
 	// traffic.
 	InstallPolicyBypassFlows(protocol binding.Protocol, ipNet *net.IPNet, port uint16, isIngress bool) error
+
+	// UpdatePodClassifierFlowsWithNewLabelID updates Pod classifierFlows with a new LabelIdentity assigned to the Pod.
+	UpdatePodClassifierFlowsWithNewLabelID(interfaceName string, newLabelIdentity uint32, podOFPort uint32, podInterfaceIPs []net.IP) error
 }
 
 // GetFlowTableStatus returns an array of flow table status.
@@ -536,10 +539,20 @@ func (c *client) InstallPodFlows(interfaceName string, podInterfaceIPs []net.IP,
 	isAntreaFlexibleIPAM := c.connectUplinkToBridge && c.nodeConfig.PodIPv4CIDR != nil && !c.nodeConfig.PodIPv4CIDR.Contains(podInterfaceIPv4)
 
 	localGatewayMAC := c.nodeConfig.GatewayConfig.MAC
-	flows := []binding.Flow{
-		c.featurePodConnectivity.podClassifierFlow(ofPort, isAntreaFlexibleIPAM),
-		c.featurePodConnectivity.l2ForwardCalcFlow(podInterfaceMAC, ofPort),
+
+	var flows []binding.Flow
+	if c.enableMulticluster {
+		// If multi-cluster is enabled, we store podClassifierFlow with a different key in
+		// cache, in order to reconcile this flow easier when the Pod update its labels.
+		podClassifierFlow := c.featurePodConnectivity.podClassifierFlow(ofPort, isAntreaFlexibleIPAM, UnknownLabelIdentity)
+		err := c.addFlows(c.featurePodConnectivity.podCachedFlows, fmt.Sprintf("%s/classifier", interfaceName), []binding.Flow{podClassifierFlow})
+		if err != nil {
+			return err
+		}
+	} else {
+		flows = append(flows, c.featurePodConnectivity.podClassifierFlow(ofPort, isAntreaFlexibleIPAM, UnknownLabelIdentity))
 	}
+	flows = append(flows, c.featurePodConnectivity.l2ForwardCalcFlow(podInterfaceMAC, ofPort))
 
 	// Add support for IPv4 ARP responder.
 	if podInterfaceIPv4 != nil {
@@ -584,6 +597,13 @@ func (c *client) installMulticastPodMetricFlows(interfaceName string, podIP net.
 func (c *client) UninstallPodFlows(interfaceName string) error {
 	c.replayMutex.RLock()
 	defer c.replayMutex.RUnlock()
+	if c.enableMulticluster {
+		// If multi-cluster is enabled, we store podClassifierFlow with a different key in
+		// cache. Handle its deletion separately here.
+		if err := c.deleteFlows(c.featurePodConnectivity.podCachedFlows, fmt.Sprintf("%s/classifier", interfaceName)); err != nil {
+			return err
+		}
+	}
 	err := c.deleteFlows(c.featurePodConnectivity.podCachedFlows, interfaceName)
 	if err != nil {
 		return err
@@ -805,7 +825,8 @@ func (c *client) generatePipelines() {
 			c.connectUplinkToBridge,
 			c.enableMulticast,
 			c.proxyAll,
-			c.enableTrafficControl)
+			c.enableTrafficControl,
+			c.enableMulticluster)
 		c.activatedFeatures = append(c.activatedFeatures, c.featurePodConnectivity)
 		c.traceableFeatures = append(c.traceableFeatures, c.featurePodConnectivity)
 
@@ -1408,4 +1429,12 @@ func (c *client) UninstallMulticlusterFlows(clusterID string) error {
 	defer c.replayMutex.RUnlock()
 	cacheKey := fmt.Sprintf("cluster_%s", clusterID)
 	return c.deleteFlows(c.featureMulticluster.cachedFlows, cacheKey)
+}
+
+func (c *client) UpdatePodClassifierFlowsWithNewLabelID(interfaceName string, newLabelIdentity uint32, podOFPort uint32, podInterfaceIPs []net.IP) error {
+	podInterfaceIPv4 := util.GetIPv4Addr(podInterfaceIPs)
+	// TODO: support IPv6
+	isAntreaFlexibleIPAM := c.connectUplinkToBridge && c.nodeConfig.PodIPv4CIDR != nil && !c.nodeConfig.PodIPv4CIDR.Contains(podInterfaceIPv4)
+	flow := c.featurePodConnectivity.podClassifierFlow(podOFPort, isAntreaFlexibleIPAM, newLabelIdentity)
+	return c.modifyFlows(c.featurePodConnectivity.podCachedFlows, fmt.Sprintf("%s/classifier", interfaceName), []binding.Flow{flow})
 }
