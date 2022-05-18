@@ -57,6 +57,7 @@ type TestOptions struct {
 	leaderClusterKubeConfigPath string
 	westClusterKubeConfigPath   string
 	eastClusterKubeConfigPath   string
+	enableGateway               bool
 	logsExportDir               string
 }
 
@@ -145,15 +146,6 @@ func (data *MCTestData) deleteTestNamespaces(timeout time.Duration) error {
 	}
 	if len(failedClusters) > 0 {
 		return fmt.Errorf("failed to delete Namespace %s in clusters %v", multiClusterTestNamespace, failedClusters)
-	}
-	return nil
-}
-
-func (data *MCTestData) deleteNamespace(clusterName, namespace string, timeout time.Duration) error {
-	if d, ok := data.clusterTestDataMap[clusterName]; ok {
-		if err := d.DeleteNamespace(namespace, timeout); err != nil {
-			return err
-		}
 	}
 	return nil
 }

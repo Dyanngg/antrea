@@ -76,6 +76,7 @@ const (
 	NxmFieldDstIPv4     = "NXM_OF_IP_DST"
 	NxmFieldSrcIPv6     = "NXM_NX_IPV6_SRC"
 	NxmFieldDstIPv6     = "NXM_NX_IPV6_DST"
+	NxmFieldInPort      = "NXM_OF_IN_PORT"
 
 	OxmFieldVLANVID = "OXM_OF_VLAN_VID"
 )
@@ -208,6 +209,7 @@ type Action interface {
 	LoadPktMarkRange(value uint32, to *Range) FlowBuilder
 	LoadIPDSCP(value uint8) FlowBuilder
 	LoadRange(name string, addr uint64, to *Range) FlowBuilder
+	LoadInPort(value uint16) FlowBuilder
 	Move(from, to string) FlowBuilder
 	MoveRange(fromName, toName string, from, to Range) FlowBuilder
 	Resubmit(port uint16, table uint8) FlowBuilder

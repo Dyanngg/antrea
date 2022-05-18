@@ -97,6 +97,10 @@ data:
     # Enable multicast traffic. This feature is supported only with noEncap mode.
     #  Multicast: false
 
+    # Enable Antrea Multi-cluster Gateway to support cross-cluster traffic.
+    # This feature is supported only with encap mode.
+    #  Multicluster: false
+
     # Enable support for provisioning secondary network interfaces for Pods (using
     # Pod annotations). At the moment, Antrea can only create secondary network
     # interfaces using SR-IOV VFs on baremetal Nodes.
@@ -2986,6 +2990,34 @@ rules:
       - get
       - list
       - watch
+  - apiGroups:
+    - multicluster.crd.antrea.io
+    resources:
+    - gateways
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - multicluster.crd.antrea.io
+    resources:
+    - gateways/status
+    verbs:
+    - get
+  - apiGroups:
+    - multicluster.crd.antrea.io
+    resources:
+    - clusterinfoimports
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - multicluster.crd.antrea.io
+    resources:
+    - clusterinfoimports/status
+    verbs:
+    - get
 ---
 # Source: antrea/templates/antctl/clusterrole.yaml
 kind: ClusterRole
@@ -3486,7 +3518,7 @@ spec:
         kubectl.kubernetes.io/default-container: antrea-agent
         # Automatically restart Pods with a RollingUpdate if the ConfigMap changes
         # See https://helm.sh/docs/howto/charts_tips_and_tricks/#automatically-roll-deployments
-        checksum/config: edef4c00e4f28a10dc1e077086ef68641a9a3b53d0fe7d47ff3dafc2ce5d5c9b
+        checksum/config: 1f9cdefd371e6dc0a3d8acb5ddeaad6027e9f1816722502fb9d820bbc8a086b8
       labels:
         app: antrea
         component: antrea-agent
@@ -3726,7 +3758,7 @@ spec:
       annotations:
         # Automatically restart Pod if the ConfigMap changes
         # See https://helm.sh/docs/howto/charts_tips_and_tricks/#automatically-roll-deployments
-        checksum/config: edef4c00e4f28a10dc1e077086ef68641a9a3b53d0fe7d47ff3dafc2ce5d5c9b
+        checksum/config: 1f9cdefd371e6dc0a3d8acb5ddeaad6027e9f1816722502fb9d820bbc8a086b8
       labels:
         app: antrea
         component: antrea-controller

@@ -262,6 +262,11 @@ logVerbosity: 0
 whereabouts:
   enable: false
 
+## -- Configure Multicluster, for use by the antrea-agent.
+multicluster:
+  # -- Enable Multicluster in Antrea
+  enable: false
+
 testing:
   ## -- enable code coverage measurement (used when testing Antrea only).
   coverage: false

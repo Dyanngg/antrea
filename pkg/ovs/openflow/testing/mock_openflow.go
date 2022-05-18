@@ -829,6 +829,20 @@ func (mr *MockActionMockRecorder) LoadIPDSCP(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadIPDSCP", reflect.TypeOf((*MockAction)(nil).LoadIPDSCP), arg0)
 }
 
+// LoadInPort mocks base method
+func (m *MockAction) LoadInPort(arg0 uint16) openflow.FlowBuilder {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LoadInPort", arg0)
+	ret0, _ := ret[0].(openflow.FlowBuilder)
+	return ret0
+}
+
+// LoadInPort indicates an expected call of LoadInPort
+func (mr *MockActionMockRecorder) LoadInPort(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadInPort", reflect.TypeOf((*MockAction)(nil).LoadInPort), arg0)
+}
+
 // LoadPktMarkRange mocks base method
 func (m *MockAction) LoadPktMarkRange(arg0 uint32, arg1 *openflow.Range) openflow.FlowBuilder {
 	m.ctrl.T.Helper()

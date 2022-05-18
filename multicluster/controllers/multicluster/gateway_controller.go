@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"sort"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -156,13 +155,17 @@ func (r *GatewayReconciler) getLastCreatedGateway() (*mcsv1alpha1.GatewayInfo, e
 		return nil, nil
 	}
 
-	// Sort Gateways by CreationTimestamp, the last created Gateway will be the first element.
-	sort.Slice(gws.Items, func(i, j int) bool {
-		return !gws.Items[i].CreationTimestamp.Before(&gws.Items[j].CreationTimestamp)
-	})
+	// Comparing Gateway's CreationTimestamp. The last created Gateway will be the first element.
+	lastCreatedGW := gws.Items[0]
+	for _, g := range gws.Items {
+		gw := g
+		if lastCreatedGW.CreationTimestamp.Before(&gw.CreationTimestamp) {
+			lastCreatedGW = gw
+		}
+	}
 
 	// Make sure we only return the last created Gateway for now.
-	return &mcsv1alpha1.GatewayInfo{GatewayIP: gws.Items[0].GatewayIP}, nil
+	return &mcsv1alpha1.GatewayInfo{GatewayIP: lastCreatedGW.GatewayIP}, nil
 }
 
 func (r *GatewayReconciler) updateResourceExport(ctx context.Context, req ctrl.Request,

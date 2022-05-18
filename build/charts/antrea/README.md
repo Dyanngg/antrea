@@ -76,6 +76,7 @@ Kubernetes: `>= 1.16.0-0`
 | kubeAPIServerOverride | string | `""` | Address of Kubernetes apiserver, to override any value provided in kubeconfig or InClusterConfig. |
 | logVerbosity | int | `0` |  |
 | multicastInterfaces | list | `[]` | Names of the interfaces on Nodes that are used to forward multicast traffic. |
+| multicluster.enable | bool | `false` | Enable Multicluster in Antrea |
 | noSNAT | bool | `false` | Whether or not to SNAT (using the Node IP) the egress traffic from a Pod to the external network. |
 | nodeIPAM.clusterCIDRs | list | `[]` | CIDR ranges to use when allocating Pod IP addresses. |
 | nodeIPAM.enable | bool | `false` | Enable Node IPAM in Antrea |
