@@ -100,10 +100,9 @@ func TestConnectivity(t *testing.T) {
 	if testOptions.enableGateway {
 		initializeGateway(t, data)
 		defer teardownGateway(t, data)
-
-		// Sleep 10s to wait resource export/import process to finish resource
+		// Sleep 5s to wait resource export/import process to finish resource
 		// exchange, and data path realization.
-		time.Sleep(10 * time.Second)
+		time.Sleep(5 * time.Second)
 	}
 
 	t.Run("testServiceExport", func(t *testing.T) {

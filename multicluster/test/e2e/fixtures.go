@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -65,10 +66,10 @@ func teardownTest(tb testing.TB, data *MCTestData) {
 	}
 }
 
-func createPodWrapper(tb testing.TB, data *MCTestData, cluster string, namespace string, name string, image string, ctr string, command []string,
+func createPodWrapper(tb testing.TB, data *MCTestData, cluster string, namespace string, name string, nodeName string, image string, ctr string, command []string,
 	args []string, env []corev1.EnvVar, ports []corev1.ContainerPort, hostNetwork bool, mutateFunc func(pod *corev1.Pod)) error {
-	tb.Logf("Creating Pod '%s'", name)
-	if err := data.createPod(cluster, name, namespace, ctr, image, command, args, env, ports, hostNetwork, mutateFunc); err != nil {
+	log.Infof("Creating Pod '%s' in Namespace %s of cluster %s", name, namespace, cluster)
+	if err := data.createPod(cluster, name, nodeName, namespace, ctr, image, command, args, env, ports, hostNetwork, mutateFunc); err != nil {
 		return err
 	}
 
@@ -80,14 +81,14 @@ func createPodWrapper(tb testing.TB, data *MCTestData, cluster string, namespace
 }
 
 func deletePodWrapper(tb testing.TB, data *MCTestData, clusterName string, namespace string, name string) {
-	tb.Logf("Deleting Pod '%s'", name)
+	log.Infof("Deleting Pod '%s' in Namespace %s of cluster %s", name, namespace, clusterName)
 	if err := data.deletePod(clusterName, namespace, name); err != nil {
 		tb.Logf("Error when deleting Pod: %v", err)
 	}
 }
 
 func deleteServiceWrapper(tb testing.TB, data *MCTestData, clusterName string, namespace string, name string) {
-	tb.Logf("Deleting Service '%s'", name)
+	log.Infof("Deleting Service '%s' in Namespace %s of cluster %s", name, namespace, clusterName)
 	if err := data.deleteService(clusterName, namespace, name); err != nil {
 		tb.Logf("Error when deleting Service: %v", err)
 	}

@@ -160,6 +160,7 @@ function wait_for_antrea_multicluster_pods_ready {
 }
 
 function wait_for_multicluster_controller_ready {
+    echo "====== Deploying Antrea Multicluster Leader Cluster with ${LEADER_CLUSTER_CONFIG} ======"
     kubectl create ns antrea-mcs-ns  "${LEADER_CLUSTER_CONFIG}" || true
     kubectl apply -f ./multicluster/test/yamls/manifest.yml "${LEADER_CLUSTER_CONFIG}"
     kubectl apply -f ./multicluster/build/yamls/antrea-multicluster-leader-global.yml "${LEADER_CLUSTER_CONFIG}"
@@ -175,15 +176,17 @@ function wait_for_multicluster_controller_ready {
     sed -i '/creationTimestamp/d' ./multicluster/test/yamls/leader-access-token.yml
     sed -i 's/antrea-multicluster-member-access-sa/antrea-multicluster-controller/g' ./multicluster/test/yamls/leader-access-token.yml
     sed -i 's/antrea-mcs-ns/kube-system/g' ./multicluster/test/yamls/leader-access-token.yml
-    echo "type: Opaque" >>./multicluster/test/yamls/leader-access-token.yml
+    echo "type: Opaque" >> ./multicluster/test/yamls/leader-access-token.yml
 
     for config in "${membercluster_kubeconfigs[@]}";
     do
+        echo "====== Deploying Antrea Multicluster Member Cluster with ${config} ======"
         kubectl apply -f ./multicluster/build/yamls/antrea-multicluster-member.yml ${config}
         kubectl rollout status deployment/antrea-mc-controller -n kube-system ${config}
         kubectl apply -f ./multicluster/test/yamls/leader-access-token.yml ${config}
     done
 
+    echo "====== ClusterSet Initialization in Leader and Member Clusters ======"
     kubectl apply -f ./multicluster/test/yamls/east-member-cluster.yml "${EAST_CLUSTER_CONFIG}"
     kubectl apply -f ./multicluster/test/yamls/west-member-cluster.yml "${WEST_CLUSTER_CONFIG}"
     kubectl apply -f ./multicluster/test/yamls/clusterset.yml "${LEADER_CLUSTER_CONFIG}"
