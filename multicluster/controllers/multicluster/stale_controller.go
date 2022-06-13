@@ -264,7 +264,7 @@ func (c *StaleResCleanupController) cleanupLabelIdentityResources(labelImpList *
 	}
 	for _, l := range staleLabelIdentities {
 		labelImp := l
-		klog.InfoS("Cleaning up stale LabelIdentity", "labelidentity", klog.KObj(&labelImp))
+		klog.V(2).InfoS("Cleaning up stale LabelIdentity", "labelidentity", klog.KObj(&labelImp))
 		if err := c.Client.Delete(ctx, &labelImp, &client.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			return err
 		}

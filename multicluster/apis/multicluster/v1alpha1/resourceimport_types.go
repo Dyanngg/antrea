@@ -35,55 +35,6 @@ type ExternalEntityImport struct {
 	ExternalEntitySpec *v1alpha2.ExternalEntitySpec `json:"externalentityspec,omitempty"`
 }
 
-// +genclient
-// +genclient:nonNamespaced
-// +kubebuilder:object:root=true
-// +kubebuilder:resource:path=labelidentityimports,scope=Cluster
-
-// LabelIdentityImport imports unique label identities in the ClusterSet.
-type LabelIdentityImport struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec LabelIdentityImportSpec `json:"spec,omitempty"`
-}
-
-type LabelIdentityImportSpec struct {
-	Label string `json:"label,omitempty"`
-	ID    uint32 `json:"id,omitempty"`
-	//ClusterIDs []string `json:"clusterIDs,omitempty"`
-}
-
-//+kubebuilder:object:root=true
-
-// LabelIdentityImportList contains a list of LabelIdentityImport.
-type LabelIdentityImportList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []LabelIdentityImport `json:"items"`
-}
-
-// +genclient
-// +genclient:nonNamespaced
-// +kubebuilder:object:root=true
-// +kubebuilder:resource:path=labelidentities,scope=Cluster
-
-type LabelIdentity struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec LabelIdentityImportSpec `json:"spec,omitempty"`
-}
-
-//+kubebuilder:object:root=true
-
-// LabelIdentityList contains a list of LabelIdentities.
-type LabelIdentityList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []LabelIdentity `json:"items"`
-}
-
 // RawResourceImport imports opaque resources.
 type RawResourceImport struct {
 	Data []byte `json:"data,omitempty"`
@@ -111,8 +62,6 @@ type ResourceImportSpec struct {
 	ExternalEntity *ExternalEntityImport `json:"externalentity,omitempty"`
 	// If imported resource is AntreaClusterNetworkPolicy.
 	ClusterNetworkPolicy *v1alpha1.ClusterNetworkPolicySpec `json:"clusternetworkpolicy,omitempty"`
-	// If imported resource is LabelIdentities of the ClusterSet.
-	LabelIdentities *LabelIdentityImportSpec `json:"labelIdentities,omitempty"`
 	// If imported resource is ANP.
 	// TODO:
 	// ANP uses float64 as priority.  Type float64 is discouraged by k8s, and is not supported by controller-gen tools.
@@ -185,9 +134,5 @@ func init() {
 	SchemeBuilder.Register(
 		&ResourceImport{},
 		&ResourceImportList{},
-		&LabelIdentityImport{},
-		&LabelIdentityImportList{},
-		&LabelIdentity{},
-		&LabelIdentityList{},
 	)
 }

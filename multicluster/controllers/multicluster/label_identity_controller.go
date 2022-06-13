@@ -41,20 +41,24 @@ import (
 	"antrea.io/antrea/multicluster/controllers/multicluster/commonarea"
 )
 
-// LabelIdentityReconciler watches relevant Pod and Namespace evetns in the member cluster,
+// LabelIdentityReconciler watches relevant Pod and Namespace events in the member cluster,
 // computes the list of unique label identities in the cluster, and exports it to the
 // leader cluster for further processing.
 type (
 	LabelIdentityReconciler struct {
 		client.Client
-		Scheme              *runtime.Scheme
-		commonAreaGetter    RemoteCommonAreaGetter
-		remoteCommonArea    commonarea.RemoteCommonArea
-		labelMutex          sync.RWMutex
+		Scheme           *runtime.Scheme
+		commonAreaGetter RemoteCommonAreaGetter
+		remoteCommonArea commonarea.RemoteCommonArea
+		// labelMutex prevents concurrent access to labelToPodsCache and podLabelCache
+		labelMutex sync.RWMutex
+		// resourceExportMutex prevents concrrent updates to the cluster label identity ResourceExport
 		resourceExportMutex sync.Mutex
-		labelToPodsCache    map[string]sets.String
-		podLabelCache       map[string]string
-		localClusterID      string
+		// labelToPodsCache stores mapping from label identities to Pods that have this label identity
+		labelToPodsCache map[string]sets.String
+		// podLabelCache stores mapping from Pods to their label identities
+		podLabelCache  map[string]string
+		localClusterID string
 	}
 )
 
@@ -75,7 +79,7 @@ func NewLabelIdentityReconciler(
 //+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 //+kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 func (r *LabelIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	klog.V(2).InfoS("Reconciling Pod/NS for label identity", "pod", req.NamespacedName)
+	klog.V(2).InfoS("Reconciling Pod/Namespace for label identity", "pod", req.NamespacedName)
 	var commonArea commonarea.RemoteCommonArea
 	var err error
 	commonArea, r.localClusterID, err = r.commonAreaGetter.GetRemoteCommonAreaAndLocalID()
@@ -93,18 +97,17 @@ func (r *LabelIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	if err := r.Client.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if apierrors.IsNotFound(err) {
-			klog.Info("Pod is not found, being deleted")
-			return ctrl.Result{}, r.onPodDelete(ctx, req.NamespacedName.String(), "")
+			klog.V(2).InfoS("Pod is deleted", "pod", req.NamespacedName)
+			return ctrl.Result{}, r.onPodDelete(ctx, req.NamespacedName.String())
 		}
-		klog.Error("Error when getting Pod")
 		return ctrl.Result{}, err
 	}
 	if pod.Spec.HostNetwork {
-		klog.V(2).Info("Skip reconcilation for host-network Pod")
+		klog.V(2).InfoS("Skip reconciliation for host-network Pod", "pod", req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 	if err := r.Client.Get(ctx, types.NamespacedName{Name: req.Namespace}, &ns); err != nil {
-		klog.Errorf("Cannot get Namespace %s of pod to be reconciled!")
+		klog.ErrorS(err, "Cannot get Namespace of Pod to be reconciled", "pod", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
 	nsLabels, podLabels := ns.Labels, pod.Labels
@@ -138,11 +141,11 @@ func namespaceMapFunc(o client.Object) []reconcile.Request {
 	}
 }
 
-// onPodDelete removes the Pod and label identity relation from the cache, and updates the clusters'
-// label identity ResourceExport if necessary (the Pod deletion event causes some label identity
+// onPodDelete removes the Pod and label identity mapping from the cache, and updates the cluster's
+// label identity ResourceExport if necessary (the Pod deletion event causes some label identities
 // to no longer being present in the cluster).
-func (r *LabelIdentityReconciler) onPodDelete(ctx context.Context, pod, normalizedLabel string) error {
-	if resExportNeedUpdate := r.deleteLabelMapping(pod, normalizedLabel); resExportNeedUpdate {
+func (r *LabelIdentityReconciler) onPodDelete(ctx context.Context, podKey string) error {
+	if resExportNeedUpdate := r.deleteLabelMapping(podKey, ""); resExportNeedUpdate {
 		labelsInCluster := r.getLabelsInCluster()
 		if err := r.refreshLabelIdentityResourceExport(ctx, labelsInCluster); err != nil {
 			return err
@@ -151,51 +154,51 @@ func (r *LabelIdentityReconciler) onPodDelete(ctx context.Context, pod, normaliz
 	return nil
 }
 
-func (r *LabelIdentityReconciler) deleteLabelMapping(pod, normalizedLabel string) bool {
+func (r *LabelIdentityReconciler) deleteLabelMapping(podKey, normalizedLabel string) (resExportNeedUpdate bool) {
 	r.labelMutex.Lock()
 	defer r.labelMutex.Unlock()
 
-	originalLabel, ok := r.podLabelCache[pod]
+	resExportNeedUpdate = false
+	originalLabel, ok := r.podLabelCache[podKey]
 	if !ok {
-		// Might be a host network Pod deletion
-		return false
-	} else if normalizedLabel == "" {
+		// Might be a host-network Pod deletion
+		return resExportNeedUpdate
+	}
+	if normalizedLabel == "" {
 		// Use the cached label identity for the Pod to clean up labelToPodsCache
 		normalizedLabel = originalLabel
 	}
-	delete(r.podLabelCache, pod)
-	podNames, ok := r.labelToPodsCache[normalizedLabel]
-	if !ok || !podNames.Has(pod) {
-		klog.V(4).InfoS("LabelItem is already removed from cache", "Pod", pod, "label", normalizedLabel)
-		return false
+	delete(r.podLabelCache, podKey)
+	if podNames, ok := r.labelToPodsCache[normalizedLabel]; ok {
+		podNames.Delete(podKey)
+		if len(podNames) == 0 {
+			klog.V(2).InfoS("Label no longer exists in the cluster", "label", normalizedLabel)
+			delete(r.labelToPodsCache, normalizedLabel)
+			resExportNeedUpdate = true
+		}
 	}
-	podNames.Delete(pod)
-	if len(podNames) == 0 {
-		klog.V(2).Infof("LabelItem %s no longer exist in the cluster", normalizedLabel)
-		delete(r.labelToPodsCache, normalizedLabel)
-		return true
-	}
-	return false
+	return resExportNeedUpdate
 }
 
 func (r *LabelIdentityReconciler) checkPodLabelCache(pod, normalizedLabel string) (string, bool) {
 	r.labelMutex.RLock()
 	defer r.labelMutex.RUnlock()
 
-	labelItem, ok := r.podLabelCache[pod]
+	cachedPodLabel, labelChanged := "", false
+	cachedPodLabel, ok := r.podLabelCache[pod]
 	if !ok {
-		return "", true
-	} else if labelItem != normalizedLabel {
-		return labelItem, true
+		labelChanged = true
+	} else if cachedPodLabel != normalizedLabel {
+		labelChanged = true
 	}
-	return "", false
+	return cachedPodLabel, labelChanged
 }
 
-// onPodUpdate updates the Pod and label identity relation in the cache, and updates the clusters'
-// label identity ResourceExport if necessary (the Pod create event causes some new label identity
+// onPodUpdate updates the Pod and label identity mapping in the cache, and updates the cluster's
+// label identity ResourceExport if necessary (the Pod creation event causes some new label identities
 // to appear in the cluster).
-func (r *LabelIdentityReconciler) onPodUpdate(ctx context.Context, pod, normalizedLabel string) error {
-	if resExportNeedUpdate := r.updateLabelMapping(pod, normalizedLabel); resExportNeedUpdate {
+func (r *LabelIdentityReconciler) onPodUpdate(ctx context.Context, podKey, normalizedLabel string) error {
+	if resExportNeedUpdate := r.updateLabelMapping(podKey, normalizedLabel); resExportNeedUpdate {
 		labelsInCluster := r.getLabelsInCluster()
 		if err := r.refreshLabelIdentityResourceExport(ctx, labelsInCluster); err != nil {
 			return err
@@ -204,47 +207,66 @@ func (r *LabelIdentityReconciler) onPodUpdate(ctx context.Context, pod, normaliz
 	return nil
 }
 
-func (r *LabelIdentityReconciler) updateLabelMapping(pod, normalizedLabel string) bool {
-	cachedLabel, needsUpdate := r.checkPodLabelCache(pod, normalizedLabel)
-	if !needsUpdate {
+// onPodUpdates updates Pod and label identity relations in batch, and updates the cluster's label identity
+// ResourceExport if ncessary.
+func (r *LabelIdentityReconciler) onPodUpdates(ctx context.Context, labelUpdates map[string]string) error {
+	resExportNeedUpdate := false
+	for podKey, normalizedLabel := range labelUpdates {
+		if updated := r.updateLabelMapping(podKey, normalizedLabel); updated {
+			resExportNeedUpdate = true
+		}
+	}
+	if resExportNeedUpdate {
+		labelsInCluster := r.getLabelsInCluster()
+		if err := r.refreshLabelIdentityResourceExport(ctx, labelsInCluster); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *LabelIdentityReconciler) updateLabelMapping(podKey, normalizedLabel string) bool {
+	cachedLabel, podLabelsUpdated := r.checkPodLabelCache(podKey, normalizedLabel)
+	if !podLabelsUpdated {
 		return false
 	}
 	if cachedLabel != "" {
-		// remove any existing pod label mappings
-		needsUpdate = r.deleteLabelMapping(pod, cachedLabel)
+		// Remove any existing Pod-label mappings
+		podLabelsUpdated = r.deleteLabelMapping(podKey, cachedLabel)
 	}
 	r.labelMutex.Lock()
 	defer r.labelMutex.Unlock()
-	r.podLabelCache[pod] = normalizedLabel
+	r.podLabelCache[podKey] = normalizedLabel
 	if _, ok := r.labelToPodsCache[normalizedLabel]; !ok {
-		r.labelToPodsCache[normalizedLabel] = sets.NewString(pod)
+		r.labelToPodsCache[normalizedLabel] = sets.NewString(podKey)
 		return true
-	} else {
-		r.labelToPodsCache[normalizedLabel].Insert(pod)
-		// Update to the LabelIdentity-type ResourceExport might still be needed
-		// if the original LabelIdentity of the Pod is no longer present in the cluster
-		return needsUpdate
 	}
+	r.labelToPodsCache[normalizedLabel].Insert(podKey)
+	// Update to the LabelIdentity-type ResourceExport might still be needed
+	// if the original LabelIdentity of the Pod is no longer present in the cluster
+	return podLabelsUpdated
 }
 
 // onNamespaceUpdate updates the label identities cached for all Pods in the Namespace
-// in case the Namespace' labels change
+// in case the Namespace's labels change
 func (r *LabelIdentityReconciler) onNamespaceUpdate(ctx context.Context, namespace string, nsLabels map[string]string) error {
 	var pods v1.PodList
 	if err := r.Client.List(ctx, &pods, &client.ListOptions{Namespace: namespace}); err != nil {
 		klog.Errorf("Failed to list current Pods in Namespace %s", namespace)
 		return err
 	}
+	labelUpdates := map[string]string{}
 	for _, p := range pods.Items {
 		if p.Spec.HostNetwork {
-			// Skip reconcilation for host-network Pods
+			// Skip reconciliation for host-network Pods
 			continue
 		}
-		klog.V(2).Infof("Re-queuing Pod %s for label identity sync", p.Namespace+"/"+p.Name)
-		podKey := p.Namespace + "/" + p.Name
-		if err := r.onPodUpdate(ctx, podKey, getNormalizedLabel(nsLabels, p.Labels)); err != nil {
-			return err
-		}
+		podKey, updatedLabel := p.Namespace+"/"+p.Name, getNormalizedLabel(nsLabels, p.Labels)
+		labelUpdates[podKey] = updatedLabel
+		klog.V(4).InfoS("Re-processing Pod for label identity sync due to Namespace label updates", "pod", podKey)
+	}
+	if err := r.onPodUpdates(ctx, labelUpdates); err != nil {
+		return err
 	}
 	return nil
 }
@@ -255,7 +277,7 @@ func (r *LabelIdentityReconciler) refreshLabelIdentityResourceExport(ctx context
 
 	existingResExport := &mcsv1alpha1.ResourceExport{}
 	resNamespaced := types.NamespacedName{
-		Name:      common.GetResourceExportNameForLabelIdentity(r.localClusterID),
+		Name:      getResourceExportNameForLabelIdentity(r.localClusterID),
 		Namespace: r.remoteCommonArea.GetNamespace(),
 	}
 	err := r.remoteCommonArea.Get(ctx, resNamespaced, existingResExport)
@@ -268,14 +290,14 @@ func (r *LabelIdentityReconciler) refreshLabelIdentityResourceExport(ctx context
 		if err = r.remoteCommonArea.Create(ctx, labelResExport, &client.CreateOptions{}); err != nil {
 			return err
 		}
-	} else {
-		// Update the cluster's label identities
-		existingResExport.Spec.LabelIdentities = &mcsv1alpha1.LabelIdentityExport{
-			NormalizedLabels: labelsInCluster,
-		}
-		if err = r.remoteCommonArea.Update(ctx, existingResExport, &client.UpdateOptions{}); err != nil {
-			return err
-		}
+		return nil
+	}
+	// Update the cluster's label identities
+	existingResExport.Spec.LabelIdentities = &mcsv1alpha1.LabelIdentityExport{
+		NormalizedLabels: labelsInCluster,
+	}
+	if err = r.remoteCommonArea.Update(ctx, existingResExport, &client.UpdateOptions{}); err != nil {
+		return err
 	}
 	return nil
 }
@@ -286,8 +308,6 @@ func (r *LabelIdentityReconciler) getLabelIdentityResourceExport(resExportNamesp
 			Name:      name,
 			Namespace: resExportNamespace,
 			Labels: map[string]string{
-				common.SourceName:      "",
-				common.SourceNamespace: "",
 				common.SourceKind:      common.LabelIdentityKind,
 				common.SourceClusterID: r.localClusterID,
 			},
@@ -316,4 +336,10 @@ func (r *LabelIdentityReconciler) getLabelsInCluster() []string {
 
 func getNormalizedLabel(nsLabels, podLabels map[string]string) string {
 	return "namespace:" + labels.FormatLabels(nsLabels) + "&pod:" + labels.FormatLabels(podLabels)
+}
+
+// getResourceExportNameForLabelIdentity retrieves the ResourceExport name for exporting
+// label identities in that cluster.
+func getResourceExportNameForLabelIdentity(clusterID string) string {
+	return clusterID + "-labels"
 }

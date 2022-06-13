@@ -262,6 +262,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: LabelIdentityImport imports unique label identities in the ClusterSet.
+          For each label identity, a LabelIdentityImport will be created in the leader
+          cluster.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -278,9 +280,13 @@ spec:
           spec:
             properties:
               id:
+                description: ID is the id allocated for the label identity by the
+                  leader cluster.
                 format: int32
                 type: integer
               label:
+                description: Label is the normalized string of a label identity. The
+                  format of normalized label identity is `namespace:(?P<nslabels>(.)*)&pod:(?P<podlabels>(.)*)`
                 type: string
             type: object
         type: object
@@ -676,10 +682,6 @@ spec:
                                 contains only "value". The requirements are ANDed.
                               type: object
                           type: object
-                        scope:
-                          description: Define scope of the Pod/NamespaceSelector(s)
-                            of this peer. Can only be used in ingress NetworkPolicyPeers.
-                          type: string
                         service:
                           description: Select a certain Service which matches the
                             NamespacedName. A Service can only be set in either policy
@@ -971,10 +973,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -1259,10 +1257,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -1616,10 +1610,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -1933,10 +1923,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -2221,10 +2207,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -2578,10 +2560,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -3601,10 +3579,6 @@ spec:
                                 contains only "value". The requirements are ANDed.
                               type: object
                           type: object
-                        scope:
-                          description: Define scope of the Pod/NamespaceSelector(s)
-                            of this peer. Can only be used in ingress NetworkPolicyPeers.
-                          type: string
                         service:
                           description: Select a certain Service which matches the
                             NamespacedName. A Service can only be set in either policy
@@ -3896,10 +3870,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -4184,10 +4154,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -4541,10 +4507,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -4858,10 +4820,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -5146,10 +5104,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -5503,10 +5457,6 @@ spec:
                                       The requirements are ANDed.
                                     type: object
                                 type: object
-                              scope:
-                                description: Define scope of the Pod/NamespaceSelector(s)
-                                  of this peer. Can only be used in ingress NetworkPolicyPeers.
-                                type: string
                               service:
                                 description: Select a certain Service which matches
                                   the NamespacedName. A Service can only be set in
@@ -5819,15 +5769,6 @@ spec:
               kind:
                 description: Kind of imported resource.
                 type: string
-              labelIdentities:
-                description: If imported resource is LabelIdentities of the ClusterSet.
-                properties:
-                  id:
-                    format: int32
-                    type: integer
-                  label:
-                    type: string
-                type: object
               name:
                 description: Name of imported resource.
                 type: string

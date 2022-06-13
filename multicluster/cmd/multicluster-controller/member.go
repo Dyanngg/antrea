@@ -75,7 +75,7 @@ func runMember(o *Options) error {
 		mgr.GetScheme(),
 		commonAreaGetter)
 	if err = labelIdentityReconciler.SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("error creating LabelIdentityExport controller: %v", err)
+		return fmt.Errorf("error creating LabelIdentity controller: %v", err)
 	}
 
 	gwReconciler := multiclustercontrollers.NewGatewayReconciler(

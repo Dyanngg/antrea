@@ -18,6 +18,9 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
+        description: LabelIdenity is an imported label identity from the ClusterSet.
+          For each unique label identity, a LabelIdentity will be created in the member
+          cluster.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -34,9 +37,13 @@ spec:
           spec:
             properties:
               id:
+                description: ID is the id allocated for the label identity by the
+                  leader cluster.
                 format: int32
                 type: integer
               label:
+                description: Label is the normalized string of a label identity. The
+                  format of normalized label identity is `namespace:(?P<nslabels>(.)*)&pod:(?P<podlabels>(.)*)`
                 type: string
             type: object
         type: object

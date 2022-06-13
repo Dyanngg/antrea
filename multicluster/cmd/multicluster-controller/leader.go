@@ -95,7 +95,7 @@ func runLeader(o *Options) error {
 		mgr.GetClient(),
 		mgr.GetScheme())
 	if err = labelExportReconciler.SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("error creating LabelExport controller: %v", err)
+		return fmt.Errorf("error creating LabelIdentityExport controller: %v", err)
 	}
 	if err = (&multiclusterv1alpha1.ResourceExport{}).SetupWebhookWithManager(mgr); err != nil {
 		return fmt.Errorf("error creating ResourceExport webhook: %v", err)

@@ -1028,11 +1028,6 @@ func (in *ResourceImportSpec) DeepCopyInto(out *ResourceImportSpec) {
 		*out = new(crdv1alpha1.ClusterNetworkPolicySpec)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.LabelIdentities != nil {
-		in, out := &in.LabelIdentities, &out.LabelIdentities
-		*out = new(LabelIdentityImportSpec)
-		**out = **in
-	}
 	if in.Raw != nil {
 		in, out := &in.Raw, &out.Raw
 		*out = new(RawResourceImport)

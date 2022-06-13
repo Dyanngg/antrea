@@ -108,9 +108,3 @@ func GetServiceEndpointPorts(ports []corev1.ServicePort) []corev1.EndpointPort {
 	}
 	return epPorts
 }
-
-// GetResourceExportNameForLabelIdentity retrieves the ResourceExport name for exporting
-// label identities in that cluster.
-func GetResourceExportNameForLabelIdentity(clusterID string) string {
-	return clusterID + "-labels"
-}

@@ -35,11 +35,6 @@ import (
 	"antrea.io/antrea/multicluster/controllers/multicluster/common"
 )
 
-func labelIdentityImportIndexerKeyFunc(obj interface{}) (string, error) {
-	ri := obj.(multiclusterv1alpha1.LabelIdentityImport)
-	return common.NamespacedName(ri.Namespace, ri.Name), nil
-}
-
 // LabelIdentityImportReconciler reconciles a LabelIdentityImport object in the member cluster.
 type LabelIdentityImportReconciler struct {
 	client.Client
@@ -64,6 +59,11 @@ func NewLabelIdentityImportReconciler(client client.Client, scheme *runtime.Sche
 	}
 }
 
+func labelIdentityImportIndexerKeyFunc(obj interface{}) (string, error) {
+	ri := obj.(multiclusterv1alpha1.LabelIdentityImport)
+	return common.NamespacedName("", ri.Name), nil
+}
+
 //+kubebuilder:rbac:groups=multicluster.crd.antrea.io,resources=labelidentityimports,verbs=get;list;watch;create;update;patch;delete
 func (r *LabelIdentityImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	klog.V(2).InfoS("Reconciling LabelIdentityImport", "labelidentityimport", req.NamespacedName)
@@ -78,7 +78,7 @@ func (r *LabelIdentityImportReconciler) Reconcile(ctx context.Context, req ctrl.
 	isDeleted := apierrors.IsNotFound(err)
 	if err != nil {
 		if !isDeleted {
-			klog.InfoS("Unable to fetch LabelIdentityImport", "labelidentityimport", req.NamespacedName.String(), "err", err)
+			klog.ErrorS(err, "Unable to fetch LabelIdentityImport", "labelidentityimport", req.NamespacedName.String())
 			return ctrl.Result{}, err
 		}
 		labelIdentityImportObj, exist, _ := r.installedLabelImports.GetByKey(req.NamespacedName.String())
@@ -96,8 +96,7 @@ func (r *LabelIdentityImportReconciler) Reconcile(ctx context.Context, req ctrl.
 func (r *LabelIdentityImportReconciler) handleLabelIdentityImpUpdate(ctx context.Context,
 	labelImp *multiclusterv1alpha1.LabelIdentityImport) (ctrl.Result, error) {
 	labelIdentityName := types.NamespacedName{
-		Namespace: "",
-		Name:      labelImp.Name,
+		Name: labelImp.Name,
 	}
 	labelIdentity := &multiclusterv1alpha1.LabelIdentity{}
 	err := r.localClusterClient.Get(ctx, labelIdentityName, labelIdentity)
@@ -121,7 +120,7 @@ func (r *LabelIdentityImportReconciler) handleLabelIdentityImpUpdate(ctx context
 		}
 		r.installedLabelImports.Add(*labelImp)
 	} else {
-		// TODO: is this branch necessary?
+		// ID assigned for LabelIdentity could change in case of leader controller restart
 		if labelIdentity.Spec.ID != labelImp.Spec.ID {
 			labelIdentity.Spec.ID = labelImp.Spec.ID
 			if err = r.localClusterClient.Update(ctx, labelIdentity, &client.UpdateOptions{}); err != nil {
@@ -136,8 +135,7 @@ func (r *LabelIdentityImportReconciler) handleLabelIdentityImpUpdate(ctx context
 func (r *LabelIdentityImportReconciler) handleLabelIdentityImpDelete(ctx context.Context,
 	labelImp *multiclusterv1alpha1.LabelIdentityImport) (ctrl.Result, error) {
 	labelIdentityName := types.NamespacedName{
-		Namespace: "",
-		Name:      labelImp.Name,
+		Name: labelImp.Name,
 	}
 	klog.V(2).InfoS("Deleting LabelIdentity corresponding to LabelIdentityImport", "labelidentityimport", klog.KObj(labelImp))
 	labelIdentity := &multiclusterv1alpha1.LabelIdentity{}
@@ -151,6 +149,7 @@ func (r *LabelIdentityImportReconciler) handleLabelIdentityImpDelete(ctx context
 		klog.ErrorS(err, "Failed to delete LabelIdentity", "labelidentity", labelIdentityName.Name)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	r.installedLabelImports.Delete(*labelImp)
 	return ctrl.Result{}, nil
 }
 
