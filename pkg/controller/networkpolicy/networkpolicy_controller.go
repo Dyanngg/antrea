@@ -54,6 +54,7 @@ import (
 	seclisters "antrea.io/antrea/pkg/client/listers/crd/v1alpha1"
 	crdv1a3listers "antrea.io/antrea/pkg/client/listers/crd/v1alpha3"
 	"antrea.io/antrea/pkg/controller/grouping"
+	"antrea.io/antrea/pkg/controller/labelidentity"
 	"antrea.io/antrea/pkg/controller/metrics"
 	"antrea.io/antrea/pkg/controller/networkpolicy/store"
 	antreatypes "antrea.io/antrea/pkg/controller/types"
@@ -236,6 +237,8 @@ type NetworkPolicyController struct {
 	groupingInterface grouping.Interface
 	// Added as a member to the struct to allow injection for testing.
 	groupingInterfaceSynced func() bool
+
+	labelidentityInterface labelidentity.Interface
 	// heartbeatCh is an internal channel for testing. It's used to know whether all tasks have been
 	// processed, and to count executions of each function.
 	heartbeatCh chan heartbeat
@@ -370,6 +373,7 @@ var anpIndexers = cache.Indexers{
 func NewNetworkPolicyController(kubeClient clientset.Interface,
 	crdClient versioned.Interface,
 	groupingInterface grouping.Interface,
+	labelidentityInterface labelidentity.Interface,
 	namespaceInformer coreinformers.NamespaceInformer,
 	serviceInformer coreinformers.ServiceInformer,
 	networkPolicyInformer networkinginformers.NetworkPolicyInformer,
@@ -399,10 +403,12 @@ func NewNetworkPolicyController(kubeClient clientset.Interface,
 		internalGroupQueue:         workqueue.NewNamedRateLimitingQueue(workqueue.NewItemExponentialFailureRateLimiter(minRetryDelay, maxRetryDelay), "internalGroup"),
 		groupingInterface:          groupingInterface,
 		groupingInterfaceSynced:    groupingInterface.HasSynced,
+		labelidentityInterface:     labelidentityInterface,
 	}
 	n.groupingInterface.AddEventHandler(appliedToGroupType, n.enqueueAppliedToGroup)
 	n.groupingInterface.AddEventHandler(addressGroupType, n.enqueueAddressGroup)
 	n.groupingInterface.AddEventHandler(internalGroupType, n.enqueueInternalGroup)
+	n.labelidentityInterface.AddEventHandler(n.triggerPolicyResyncForLabelIdentityUpdates)
 	// Add handlers for NetworkPolicy events.
 	networkPolicyInformer.Informer().AddEventHandlerWithResyncPeriod(
 		cache.ResourceEventHandlerFuncs{
@@ -1384,6 +1390,27 @@ func (n *NetworkPolicyController) getInternalGroupWorkloads(group *antreatypes.G
 	return pods, ees, nil
 }
 
+func (n *NetworkPolicyController) triggerPolicyResyncForLabelIdentityUpdates(key string) {
+	n.internalNetworkPolicyMutex.RLock()
+	klog.V(2).InfoS("Resyncing policy for LabelIdentity events", "policy", key)
+	internalNPObj, found, _ := n.internalNetworkPolicyStore.Get(key)
+	n.internalNetworkPolicyMutex.RUnlock()
+	if !found {
+		return
+	}
+	internalNP := internalNPObj.(*antreatypes.NetworkPolicy)
+	switch internalNP.SourceRef.Type {
+	case controlplane.AntreaClusterNetworkPolicy:
+		if cnp, err := n.cnpLister.Get(internalNP.SourceRef.Name); err == nil {
+			n.enqueueInternalNetworkPolicy(getACNPReference(cnp))
+		}
+	case controlplane.AntreaNetworkPolicy:
+		if anp, err := n.anpLister.NetworkPolicies(internalNP.SourceRef.Namespace).Get(internalNP.SourceRef.Name); err == nil {
+			n.enqueueInternalNetworkPolicy(getANPReference(anp))
+		}
+	}
+}
+
 // syncInternalNetworkPolicy retrieves all the AppliedToGroups associated with
 // itself in order to calculate the Node span for this policy.
 func (n *NetworkPolicyController) syncInternalNetworkPolicy(key *controlplane.NetworkPolicyReference) error {
@@ -1548,7 +1575,9 @@ func (n *NetworkPolicyController) deleteInternalNetworkPolicy(name string) {
 	internalNetworkPolicy := obj.(*antreatypes.NetworkPolicy)
 	n.internalNetworkPolicyStore.Delete(internalNetworkPolicy.Name)
 	n.cleanupOrphanGroups(internalNetworkPolicy)
-
+	if features.DefaultFeatureGate.Enabled(features.Multicluster) && internalNetworkPolicy.SourceRef.Type != controlplane.K8sNetworkPolicy {
+		n.labelidentityInterface.DeletePolicySelectors(internalNetworkPolicy.Name)
+	}
 	// Enqueue AddressGroups previously used by this NetworkPolicy as their span may change due to the removal.
 	for agName := range internalNetworkPolicy.GetAddressGroups() {
 		n.enqueueAddressGroup(agName)

@@ -737,6 +737,9 @@ spec:
                                   type: array
                                 matchLabels:
                                   x-kubernetes-preserve-unknown-fields: true
+                            scope:
+                              type: string
+                              enum: [ 'ClusterSet' ]
                       name:
                         type: string
                       enableLogging:
@@ -1347,11 +1350,12 @@ spec:
       storage: true
   scope: Namespaced
   names:
-    kind: ExternalNode
     plural: externalnodes
+    singular: externalnode
+    kind: ExternalNode
     shortNames:
       - en
-    singular: externalnode
+
 ---
 # Source: crds/ippool.yaml
 apiVersion: apiextensions.k8s.io/v1
@@ -1792,6 +1796,9 @@ spec:
                                   x-kubernetes-preserve-unknown-fields: true
                             group:
                               type: string
+                            scope:
+                              type: string
+                              enum: [ 'ClusterSet' ]
                       name:
                         type: string
                       enableLogging:
@@ -3980,6 +3987,14 @@ rules:
       - apps
     resources:
       - statefulsets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - multicluster.crd.antrea.io
+    resources:
+      - labelidentities
     verbs:
       - get
       - list
