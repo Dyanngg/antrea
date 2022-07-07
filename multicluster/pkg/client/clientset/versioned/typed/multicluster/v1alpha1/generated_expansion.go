@@ -23,8 +23,6 @@ type GatewayExpansion interface{}
 
 type LabelIdentityExpansion interface{}
 
-type LabelIdentityImportExpansion interface{}
-
 type MemberClusterAnnounceExpansion interface{}
 
 type ResourceExportExpansion interface{}

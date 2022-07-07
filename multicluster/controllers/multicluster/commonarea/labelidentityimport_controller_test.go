@@ -17,10 +17,10 @@ limitations under the License.
 package commonarea
 
 import (
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"reflect"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,57 +31,93 @@ import (
 )
 
 var (
-	labelIdentityImportName = "label-identity-app-client"
+	labelIdentityResImportName = "label-identity-app-client"
 
-	labelIdentityImpReq = ctrl.Request{NamespacedName: types.NamespacedName{
-		Namespace: leaderNamespace,
-		Name:      labelIdentityImportName,
+	labelIdentityResImpReq = ctrl.Request{NamespacedName: types.NamespacedName{
+		Name: labelIdentityResImportName,
 	}}
 
-	labelIdentityImport = &mcsv1alpha1.LabelIdentityImport{
+	labelIdentityResImport = &mcsv1alpha1.ResourceImport{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: leaderNamespace,
-			Name:      labelIdentityImportName,
+			Name: labelIdentityResImportName,
 		},
-		Spec: mcsv1alpha1.LabelIdentityImportSpec{
-			Label: "namespace:kubernetes.io/metadata.name=ns&pod:app=client",
-			ID:    uint32(1),
+		Spec: mcsv1alpha1.ResourceImportSpec{
+			LabelIdentity: &mcsv1alpha1.LabelIdentitySpec{
+				Label: "namespace:kubernetes.io/metadata.name=ns&pod:app=client",
+				ID:    uint32(1),
+			},
 		},
 	}
 )
 
-func TestLabelIdentityImportReconciler_handleLabelIdentityCreateEvent(t *testing.T) {
+func TestLabelIdentityResourceImportReconciler_handleLabelIdentityCreateEvent(t *testing.T) {
 	remoteMgr := NewRemoteCommonAreaManager("test-clusterset", common.ClusterID(localClusterID), "kube-system")
 	remoteMgr.Start()
 	defer remoteMgr.Stop()
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(labelIdentityImport).Build()
+	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(labelIdentityResImport).Build()
 	remoteCluster := NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", "default")
 
-	r := NewLabelIdentityImportReconciler(fakeClient, scheme, fakeClient, localClusterID, "default", remoteCluster)
+	r := NewLabelIdentityResourceImportReconciler(fakeClient, scheme, fakeClient, localClusterID, "default", remoteCluster)
 
-	if _, err := r.Reconcile(ctx, labelIdentityImpReq); err != nil {
-		t.Errorf("LabelIdentityImport Reconciler should handle LabelIdentity create event successfully but got error = %v", err)
+	if _, err := r.Reconcile(ctx, labelIdentityResImpReq); err != nil {
+		t.Errorf("LabelIdentityResourceImport Reconciler should handle LabelIdentity create event successfully but got error = %v", err)
 	} else {
 		labelIdentity := &mcsv1alpha1.LabelIdentity{}
-		if err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "", Name: labelIdentityImportName}, labelIdentity); err != nil {
-			t.Errorf("LabelIdentityImport Reconciler should import a LabelIdentity successfully but got error = %v", err)
-		} else if !reflect.DeepEqual(labelIdentityImport.Spec, labelIdentity.Spec) {
-			t.Errorf("LabelIdentityImport Reconciler imported a LabelIdentity incorrectly. Exp: %v, Act: %v", labelIdentityImport.Spec, labelIdentity.Spec)
+		if err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "", Name: labelIdentityResImportName}, labelIdentity); err != nil {
+			t.Errorf("LabelIdentityResourceImport Reconciler should import a LabelIdentity successfully but got error = %v", err)
+		} else if !reflect.DeepEqual(*labelIdentityResImport.Spec.LabelIdentity, labelIdentity.Spec) {
+			t.Errorf("LabelIdentityResourceImport Reconciler imported a LabelIdentity incorrectly. Exp: %v, Act: %v", labelIdentityResImport.Spec.LabelIdentity, labelIdentity.Spec)
 		}
 	}
 }
 
-func TestLabelIdentityImportReconciler_handleLabelIdentityUpdateEvent(t *testing.T) {
+func TestLabelIdentityResourceImportReconciler_handleLabelIdentityUpdateEvent(t *testing.T) {
+	remoteMgr := NewRemoteCommonAreaManager("test-clusterset", common.ClusterID(localClusterID), "kube-system")
+	remoteMgr.Start()
+	defer remoteMgr.Stop()
+
+	existLabelIdentity := &mcsv1alpha1.LabelIdentity{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: labelIdentityResImportName,
+		},
+		Spec: mcsv1alpha1.LabelIdentitySpec{
+			Label: "namespace:kubernetes.io/metadata.name=ns&pod:app=client",
+			ID:    uint32(2),
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existLabelIdentity).Build()
+	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(labelIdentityResImport).Build()
+	remoteCluster := NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", "default")
+	r := NewLabelIdentityResourceImportReconciler(fakeClient, scheme, fakeClient, localClusterID, "default", remoteCluster)
+	r.installedLabelImports.Add(*labelIdentityResImport)
+
+	if _, err := r.Reconcile(ctx, labelIdentityResImpReq); err != nil {
+		t.Errorf("LabelIdentityResourceImport Reconciler should handle LabelIdentity delete event successfully but got error = %v", err)
+	} else {
+		labelIdentity := &mcsv1alpha1.LabelIdentity{}
+		if err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "", Name: labelIdentityResImportName}, labelIdentity); err != nil {
+			t.Errorf("LabelIdentityResourceImport Reconciler should import a LabelIdentity successfully but got error = %v", err)
+		} else if !reflect.DeepEqual(labelIdentity.Spec, *labelIdentityResImport.Spec.LabelIdentity) {
+			t.Errorf("LabelIdentityResourceImport Reconciler failed to update a LabelIdentity. Exp: %v, Act: %v", labelIdentityResImport.Spec.LabelIdentity, labelIdentity.Spec)
+		}
+	}
+}
+
+func TestLabelIdentityResourceImportReconciler_handleLabelIdentityDeleteEvent(t *testing.T) {
 	remoteMgr := NewRemoteCommonAreaManager("test-clusterset", common.ClusterID(localClusterID), "kube-system")
 	remoteMgr.Start()
 	defer remoteMgr.Stop()
 
 	existingLabelIdentity := &mcsv1alpha1.LabelIdentity{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: leaderNamespace,
-			Name:      labelIdentityImportName,
+			Name: labelIdentityResImportName,
+		},
+		Spec: mcsv1alpha1.LabelIdentitySpec{
+			Label: "namespace:kubernetes.io/metadata.name=ns&pod:app=client",
+			ID:    uint32(1),
 		},
 	}
 
@@ -89,50 +125,15 @@ func TestLabelIdentityImportReconciler_handleLabelIdentityUpdateEvent(t *testing
 	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 	remoteCluster := NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", "default")
 
-	r := NewLabelIdentityImportReconciler(fakeClient, scheme, fakeClient, localClusterID, "default", remoteCluster)
-	r.installedLabelImports.Add(*labelIdentityImport)
+	r := NewLabelIdentityResourceImportReconciler(fakeClient, scheme, fakeClient, localClusterID, "default", remoteCluster)
+	r.installedLabelImports.Add(*labelIdentityResImport)
 
-	if _, err := r.Reconcile(ctx, labelIdentityImpReq); err != nil {
-		t.Errorf("LabelIdentityImport Reconciler should handle LabelIdentity delete event successfully but got error = %v", err)
+	if _, err := r.Reconcile(ctx, labelIdentityResImpReq); err != nil {
+		t.Errorf("LabelIdentityResourceImport Reconciler should handle LabelIdentity update event successfully but got error = %v", err)
 	} else {
 		labelIdentity := &mcsv1alpha1.LabelIdentity{}
-		if err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "", Name: labelIdentityImportName}, labelIdentity); !apierrors.IsNotFound(err) {
-			t.Errorf("LabelIdentityImport Reconciler should import a LabelIdentity successfully but got error = %v", err)
-		}
-	}
-}
-
-func TestLabelIdentityImportReconciler_handleLabelIdentityDeleteEvent(t *testing.T) {
-	remoteMgr := NewRemoteCommonAreaManager("test-clusterset", common.ClusterID(localClusterID), "kube-system")
-	remoteMgr.Start()
-	defer remoteMgr.Stop()
-
-	existingLabelIdentity := &mcsv1alpha1.LabelIdentity{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: leaderNamespace,
-			Name:      labelIdentityImportName,
-		},
-		Spec: mcsv1alpha1.LabelIdentityImportSpec{
-			Label: "namespace:kubernetes.io/metadata.name=ns&pod:app=client",
-			ID:    uint32(2),
-		},
-	}
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existingLabelIdentity).Build()
-	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(labelIdentityImport).Build()
-	remoteCluster := NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", "default")
-
-	r := NewLabelIdentityImportReconciler(fakeClient, scheme, fakeClient, localClusterID, "default", remoteCluster)
-	r.installedLabelImports.Add(*labelIdentityImport)
-
-	if _, err := r.Reconcile(ctx, labelIdentityImpReq); err != nil {
-		t.Errorf("LabelIdentityImport Reconciler should handle LabelIdentity update event successfully but got error = %v", err)
-	} else {
-		labelIdentity := &mcsv1alpha1.LabelIdentity{}
-		if err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "", Name: labelIdentityImportName}, labelIdentity); err != nil {
-			t.Errorf("LabelIdentityImport Reconciler should import a LabelIdentity successfully but got error = %v", err)
-		} else if !reflect.DeepEqual(labelIdentityImport.Spec, labelIdentity.Spec) {
-			t.Errorf("LabelIdentityImport Reconciler imported a LabelIdentity incorrectly. Exp: %v, Act: %v", labelIdentityImport.Spec, labelIdentity.Spec)
+		if err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "", Name: labelIdentityResImportName}, labelIdentity); !apierrors.IsNotFound(err) {
+			t.Errorf("LabelIdentityResourceImport Reconciler failed to delete a LabelIdentity")
 		}
 	}
 }

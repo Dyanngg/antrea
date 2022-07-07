@@ -248,59 +248,6 @@ metadata:
   creationTimestamp: null
   labels:
     app: antrea
-  name: labelidentityimports.multicluster.crd.antrea.io
-spec:
-  group: multicluster.crd.antrea.io
-  names:
-    kind: LabelIdentityImport
-    listKind: LabelIdentityImportList
-    plural: labelidentityimports
-    singular: labelidentityimport
-  scope: Cluster
-  versions:
-  - name: v1alpha1
-    schema:
-      openAPIV3Schema:
-        description: LabelIdentityImport imports unique label identities in the ClusterSet.
-          For each label identity, a LabelIdentityImport will be created in the leader
-          cluster.
-        properties:
-          apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-            type: string
-          kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-            type: string
-          metadata:
-            type: object
-          spec:
-            properties:
-              id:
-                description: ID is the id allocated for the label identity by the
-                  leader cluster.
-                format: int32
-                type: integer
-              label:
-                description: Label is the normalized string of a label identity. The
-                  format of normalized label identity is `namespace:(?P<nslabels>(.)*)&pod:(?P<podlabels>(.)*)`
-                type: string
-            type: object
-        type: object
-    served: true
-    storage: true
----
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  annotations:
-    controller-gen.kubebuilder.io/version: v0.9.0
-  creationTimestamp: null
-  labels:
-    app: antrea
   name: memberclusterannounces.multicluster.crd.antrea.io
 spec:
   group: multicluster.crd.antrea.io
@@ -5769,6 +5716,22 @@ spec:
               kind:
                 description: Kind of imported resource.
                 type: string
+              labelidentity:
+                description: 'If imported resource is ANP. TODO: ANP uses float64
+                  as priority.  Type float64 is discouraged by k8s, and is not supported
+                  by controller-gen tools. NetworkPolicy *v1alpha1.NetworkPolicySpec
+                  `json:"networkpolicy,omitempty"` If imported resource kind is LabelIdentity.'
+                properties:
+                  id:
+                    description: ID is the id allocated for the label identity by
+                      the leader cluster.
+                    format: int32
+                    type: integer
+                  label:
+                    description: Label is the normalized string of a label identity.
+                      The format of normalized label identity is `namespace:(?P<nslabels>(.)*)&pod:(?P<podlabels>(.)*)`
+                    type: string
+                type: object
               name:
                 description: Name of imported resource.
                 type: string
@@ -5776,10 +5739,7 @@ spec:
                 description: Namespace of imported resource.
                 type: string
               raw:
-                description: 'If imported resource is ANP. TODO: ANP uses float64
-                  as priority.  Type float64 is discouraged by k8s, and is not supported
-                  by controller-gen tools. NetworkPolicy *v1alpha1.NetworkPolicySpec
-                  `json:"networkpolicy,omitempty"` If imported resource kind is unknown.'
+                description: If imported resource kind is unknown.
                 properties:
                   data:
                     format: byte

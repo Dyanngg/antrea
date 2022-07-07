@@ -41,10 +41,6 @@ func (c *FakeMulticlusterV1alpha1) LabelIdentities() v1alpha1.LabelIdentityInter
 	return &FakeLabelIdentities{c}
 }
 
-func (c *FakeMulticlusterV1alpha1) LabelIdentityImports() v1alpha1.LabelIdentityImportInterface {
-	return &FakeLabelIdentityImports{c}
-}
-
 func (c *FakeMulticlusterV1alpha1) MemberClusterAnnounces(namespace string) v1alpha1.MemberClusterAnnounceInterface {
 	return &FakeMemberClusterAnnounces{c, namespace}
 }

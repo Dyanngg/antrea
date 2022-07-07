@@ -219,14 +219,6 @@ rules:
 - apiGroups:
   - multicluster.crd.antrea.io
   resources:
-  - labelidentityimports
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - multicluster.crd.antrea.io
-  resources:
   - gateways
   verbs:
   - create

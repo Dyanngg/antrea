@@ -17,16 +17,17 @@ limitations under the License.
 package multicluster
 
 import (
-	mcsv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
-	"antrea.io/antrea/multicluster/controllers/multicluster/common"
-	"antrea.io/antrea/multicluster/controllers/multicluster/commonarea"
-	"reflect"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	mcsv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
+	"antrea.io/antrea/multicluster/controllers/multicluster/common"
+	"antrea.io/antrea/multicluster/controllers/multicluster/commonarea"
 )
 
 var (
@@ -72,12 +73,12 @@ func TestLabelIdentityExportReconciler_handleCreateEvent(t *testing.T) {
 		if labelsSet, ok := r.clusterToLabels[localClusterID]; !ok || !labelsSet.Has(normalizedLabelNSAppClient) {
 			t.Errorf("LabelIdentityExport Reconciler failed to store %s in r.clusterToLabels[%s]", normalizedLabelNSAppClient, localClusterID)
 		}
-		labelIdentityImport := &mcsv1alpha1.LabelIdentityImport{}
-		err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: hashLabelIdentity(normalizedLabelNSAppClient)}, labelIdentityImport)
+		labelIdentityResImport := &mcsv1alpha1.ResourceImport{}
+		err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: hashLabelIdentity(normalizedLabelNSAppClient)}, labelIdentityResImport)
 		if err != nil {
-			t.Errorf("LabelIdentityExport Reconciler should create new LabelIdentityImport successfully but got error = %v", err)
-		} else if labelIdentityImport.Spec.Label != normalizedLabelNSAppClient {
-			t.Errorf("LabelIdentityExport Reconciler create LabelIdentityImport incorrectly. ExpLabel:%s, ActLabel:%s", normalizedLabelNSAppClient, labelIdentityImport.Spec.Label)
+			t.Errorf("LabelIdentityExport Reconciler should create new LabelIdentity kind ResourceImport successfully but got error = %v", err)
+		} else if labelIdentityResImport.Spec.LabelIdentity.Label != normalizedLabelNSAppClient {
+			t.Errorf("LabelIdentityExport Reconciler create LabelIdentity kind ResourceImport incorrectly. ExpLabel:%s, ActLabel:%s", normalizedLabelNSAppClient, labelIdentityResImport.Spec.LabelIdentity.Label)
 		}
 	}
 }
@@ -131,18 +132,17 @@ func TestLabelIdentityExportReconciler_handleUpdateEvent(t *testing.T) {
 			t.Errorf("LabelIdentityExport Reconciler failed to store %s in r.clusterToLabels[%s]", normalizedLabelNSAppDB, localClusterID)
 		}
 
-		clientLabelIdentityImport := &mcsv1alpha1.LabelIdentityImport{}
-		err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: hashLabelIdentity(normalizedLabelNSAppClient)}, clientLabelIdentityImport)
-		if !reflect.DeepEqual(clientLabelIdentityImport, &mcsv1alpha1.LabelIdentityImport{}) {
-			t.Errorf("LabelIdentityExport Reconciler failed to delete LabelIdentityImport for label:%s", normalizedLabelNSAppClient)
+		clientLabelIdentityResImport := &mcsv1alpha1.ResourceImport{}
+		if err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: hashLabelIdentity(normalizedLabelNSAppClient)}, clientLabelIdentityResImport); !apierrors.IsNotFound(err) {
+			t.Errorf("LabelIdentityExport Reconciler failed to delete LabelIdentity kind ResourceImport for label:%s", normalizedLabelNSAppClient)
 		}
 
-		dbLabelIdentityImport := &mcsv1alpha1.LabelIdentityImport{}
-		err = fakeClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: hashLabelIdentity(normalizedLabelNSAppDB)}, dbLabelIdentityImport)
+		dbLabelIdentityResImport := &mcsv1alpha1.ResourceImport{}
+		err = fakeClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: hashLabelIdentity(normalizedLabelNSAppDB)}, dbLabelIdentityResImport)
 		if err != nil {
-			t.Errorf("LabelIdentityExport Reconciler should create new LabelIdentityImport successfully but got error = %v", err)
-		} else if dbLabelIdentityImport.Spec.Label != normalizedLabelNSAppDB {
-			t.Errorf("LabelIdentityExport Reconciler create LabelIdentityImport incorrectly. ExpLabel:%s, ActLabel:%s", normalizedLabelNSAppClient, dbLabelIdentityImport.Spec.Label)
+			t.Errorf("LabelIdentityExport Reconciler should create new LabelIdentity kind ResourceImport successfully but got error = %v", err)
+		} else if dbLabelIdentityResImport.Spec.LabelIdentity.Label != normalizedLabelNSAppDB {
+			t.Errorf("LabelIdentityExport Reconciler create LabelIdentity kind ResourceImport incorrectly. ExpLabel:%s, ActLabel:%s", normalizedLabelNSAppClient, dbLabelIdentityResImport.Spec.LabelIdentity.Label)
 		}
 	}
 }

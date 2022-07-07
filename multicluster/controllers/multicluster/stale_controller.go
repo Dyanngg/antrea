@@ -77,11 +77,10 @@ func NewStaleResCleanupController(
 	return reconciler
 }
 
-//+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;delete
-//+kubebuilder:rbac:groups=multicluster.x-k8s.io,resources=serviceimports,verbs=get;list;watch;delete
-//+kubebuilder:rbac:groups=multicluster.crd.antrea.io,resources=resourceimports,verbs=get;list;watch;
-//+kubebuilder:rbac:groups=multicluster.crd.antrea.io,resources=labelidentityimports,verbs=get;list;watch;
-//+kubebuilder:rbac:groups=multicluster.crd.antrea.io,resources=resourceexports,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=multicluster.x-k8s.io,resources=serviceimports,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups=multicluster.crd.antrea.io,resources=resourceimports,verbs=get;list;watch;
+// +kubebuilder:rbac:groups=multicluster.crd.antrea.io,resources=resourceexports,verbs=get;list;watch;delete
 
 func (c *StaleResCleanupController) cleanup() error {
 	switch c.clusterRole {
@@ -122,13 +121,8 @@ func (c *StaleResCleanupController) cleanupStaleResourcesOnMember() error {
 		klog.ErrorS(err, "Failed to cleanup stale ClusterInfoImports")
 		return err
 	}
-
-	labelImpList := &mcsv1alpha1.LabelIdentityImportList{}
-	if err := commonArea.List(ctx, labelImpList, &client.ListOptions{}); err != nil {
-		return err
-	}
-	if err := c.cleanupLabelIdentityResources(labelImpList); err != nil {
-		klog.ErrorS(err, "Failed to cleanup stale LabelIdentities")
+	if err := c.cleanupLabelIdentityImport(resImpList); err != nil {
+		klog.ErrorS(err, "Failed to cleanup stale LabelIdentityImports")
 		return err
 	}
 
@@ -250,7 +244,7 @@ func (c *StaleResCleanupController) cleanupClusterInfoImport(resImpList *mcsv1al
 	return nil
 }
 
-func (c *StaleResCleanupController) cleanupLabelIdentityResources(labelImpList *mcsv1alpha1.LabelIdentityImportList) error {
+func (c *StaleResCleanupController) cleanupLabelIdentityImport(resImpList *mcsv1alpha1.ResourceImportList) error {
 	labelIdentityList := &mcsv1alpha1.LabelIdentityList{}
 	if err := c.List(ctx, labelIdentityList, &client.ListOptions{}); err != nil {
 		return err
@@ -259,7 +253,7 @@ func (c *StaleResCleanupController) cleanupLabelIdentityResources(labelImpList *
 	for _, labelIdentityObj := range labelIdentityList.Items {
 		staleLabelIdentities[labelIdentityObj.Name] = labelIdentityObj
 	}
-	for _, labelImp := range labelImpList.Items {
+	for _, labelImp := range resImpList.Items {
 		delete(staleLabelIdentities, labelImp.Name)
 	}
 	for _, l := range staleLabelIdentities {

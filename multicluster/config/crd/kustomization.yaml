@@ -12,7 +12,6 @@ resources:
 - bases/multicluster.crd.antrea.io_clusterinfoimports.yaml
 - bases/multicluster.crd.antrea.io_gateways.yaml
 - bases/multicluster.crd.antrea.io_labelidentities.yaml
-- bases/multicluster.crd.antrea.io_labelidentityimports.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

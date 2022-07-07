@@ -17,16 +17,18 @@ limitations under the License.
 package multicluster
 
 import (
-	mcsv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
-	"antrea.io/antrea/multicluster/controllers/multicluster/common"
-	"antrea.io/antrea/multicluster/controllers/multicluster/commonarea"
+	"testing"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
+
+	mcsv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
+	"antrea.io/antrea/multicluster/controllers/multicluster/common"
+	"antrea.io/antrea/multicluster/controllers/multicluster/commonarea"
 )
 
 var (
@@ -63,7 +65,7 @@ func TestLabelIdentityReconciler_handlePodAddEvent(t *testing.T) {
 	defer remoteMgr.Stop()
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(podA, ns).Build()
-	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects().Build()
+	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	_ = commonarea.NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", leaderNamespace)
 	mcReconciler := NewMemberClusterSetReconciler(fakeClient, scheme, "default")
@@ -114,7 +116,7 @@ func TestLabelIdentityReconciler_handlePodUpdateEvent(t *testing.T) {
 	normalizedLabelNSAppDB := "namespace:kubernetes.io/metadata.name=ns&pod:app=db"
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(podA, ns).Build()
-	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects().Build()
+	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	_ = commonarea.NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", leaderNamespace)
 	mcReconciler := NewMemberClusterSetReconciler(fakeClient, scheme, "default")
