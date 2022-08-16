@@ -17,35 +17,26 @@ limitations under the License.
 package multicluster
 
 import (
+	"reflect"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	mcsv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
-	"antrea.io/antrea/multicluster/controllers/multicluster/common"
 	"antrea.io/antrea/multicluster/controllers/multicluster/commonarea"
 )
 
 var (
-	podReq = ctrl.Request{NamespacedName: types.NamespacedName{
-		Namespace: "ns",
-		Name:      "pod-a",
-	}}
-
-	podA = &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ns",
-			Name:      "pod-a",
-			Labels: map[string]string{
-				"app": "client",
-			},
-		},
-	}
+	addEvent    = 0
+	updateEvent = 1
+	deleteEvent = 2
 
 	ns = &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -55,168 +46,7 @@ var (
 			},
 		},
 	}
-
-	podNamespacedName = types.NamespacedName{Namespace: "ns", Name: "pod-a"}.String()
-)
-
-func TestLabelIdentityReconciler_handlePodAddEvent(t *testing.T) {
-	remoteMgr := commonarea.NewRemoteCommonAreaManager("test-clusterset", common.ClusterID(localClusterID), "kube-system")
-	remoteMgr.Start()
-	defer remoteMgr.Stop()
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(podA, ns).Build()
-	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-
-	_ = commonarea.NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", leaderNamespace)
-	mcReconciler := NewMemberClusterSetReconciler(fakeClient, scheme, "default")
-	mcReconciler.SetRemoteCommonAreaManager(remoteMgr)
-	commonAreaGetter := mcReconciler
-	commonArea, localClusterID, _ := commonAreaGetter.GetRemoteCommonAreaAndLocalID()
-	r := NewLabelIdentityReconciler(fakeClient, scheme, commonAreaGetter)
-
-	if _, err := r.Reconcile(ctx, podReq); err != nil {
-		t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
-	} else {
-		if podLabelIdentity, ok := r.podLabelCache[podNamespacedName]; !ok || podLabelIdentity != normalizedLabelNSAppClient {
-			t.Errorf("LabelIdentity Reconciler failed to store %s in r.podLabelCache[%s]", normalizedLabelNSAppClient, podNamespacedName)
-		}
-		if podSet, ok := r.labelToPodsCache[normalizedLabelNSAppClient]; !ok || !podSet.Has(podNamespacedName) {
-			t.Errorf("LabelIdentity Reconciler failed to store %s in r.labelToPodsCache[%s]", podNamespacedName, normalizedLabelNSAppClient)
-		}
-		labelIdentityExport := &mcsv1alpha1.ResourceExport{}
-		err := commonArea.Get(ctx, types.NamespacedName{Namespace: commonArea.GetNamespace(), Name: getResourceExportNameForLabelIdentity(localClusterID)}, labelIdentityExport)
-		if err != nil {
-			t.Errorf("LabelIdentity Reconciler should create new LabelIdentityExport successfully but got error = %v", err)
-		} else {
-			for _, normalizedLabel := range labelIdentityExport.Spec.LabelIdentities.NormalizedLabels {
-				if normalizedLabel == normalizedLabelNSAppClient {
-					return
-				}
-			}
-			t.Errorf("LabelIdentity Reconciler create LabelIdentityExport incorrectly. Should include %s, ActLabels:%s", normalizedLabelNSAppClient, labelIdentityExport.Spec.LabelIdentities.NormalizedLabels)
-		}
-	}
-}
-
-func TestLabelIdentityReconciler_handlePodUpdateEvent(t *testing.T) {
-	remoteMgr := commonarea.NewRemoteCommonAreaManager("test-clusterset", common.ClusterID(localClusterID), "kube-system")
-	remoteMgr.Start()
-	defer remoteMgr.Stop()
-
-	newPodA := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "ns",
-			Name:      "pod-a",
-			Labels: map[string]string{
-				"app": "db",
-			},
-		},
-	}
-
-	normalizedLabelNSAppDB := "namespace:kubernetes.io/metadata.name=ns&pod:app=db"
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(podA, ns).Build()
-	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-
-	_ = commonarea.NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", leaderNamespace)
-	mcReconciler := NewMemberClusterSetReconciler(fakeClient, scheme, "default")
-	mcReconciler.SetRemoteCommonAreaManager(remoteMgr)
-	commonAreaGetter := mcReconciler
-	commonArea, localClusterID, _ := commonAreaGetter.GetRemoteCommonAreaAndLocalID()
-	r := NewLabelIdentityReconciler(fakeClient, scheme, commonAreaGetter)
-	if _, err := r.Reconcile(ctx, podReq); err != nil {
-		t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
-	}
-
-	r.Client.Update(ctx, newPodA, &client.UpdateOptions{})
-	if _, err := r.Reconcile(ctx, podReq); err != nil {
-		t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
-	} else {
-		if podLabelIdentity, ok := r.podLabelCache[podNamespacedName]; !ok || podLabelIdentity != normalizedLabelNSAppDB {
-			t.Errorf("LabelIdentity Reconciler failed to store %s in r.podLabelCache[%s]", normalizedLabelNSAppDB, podNamespacedName)
-		}
-		if podSet, ok := r.labelToPodsCache[normalizedLabelNSAppDB]; !ok || !podSet.Has(podNamespacedName) {
-			t.Errorf("LabelIdentity Reconciler failed to store %s in r.labelToPodsCache[%s]", podNamespacedName, normalizedLabelNSAppDB)
-		}
-		if podSet, ok := r.labelToPodsCache[normalizedLabelNSAppClient]; ok && !podSet.Has(podNamespacedName) {
-			t.Errorf("LabelIdentity Reconciler failed to delete %s in r.labelToPodsCache[%s]", podNamespacedName, normalizedLabelNSAppClient)
-		}
-		labelIdentityExport := &mcsv1alpha1.ResourceExport{}
-		err := commonArea.Get(ctx, types.NamespacedName{Namespace: commonArea.GetNamespace(), Name: getResourceExportNameForLabelIdentity(localClusterID)}, labelIdentityExport)
-		if err != nil {
-			t.Errorf("LabelIdentity Reconciler should create new LabelIdentityExport successfully but got error = %v", err)
-		} else {
-			findDB := false
-			findClient := false
-			for _, normalizedLabel := range labelIdentityExport.Spec.LabelIdentities.NormalizedLabels {
-				if normalizedLabel == normalizedLabelNSAppDB {
-					findDB = true
-				}
-				if normalizedLabel == normalizedLabelNSAppClient {
-					findClient = true
-				}
-			}
-			if !findDB || findClient {
-				t.Errorf("LabelIdentity Reconciler create LabelIdentityExport incorrectly. Should include %s and not include %s, ActLabels:%s", normalizedLabelNSAppDB, normalizedLabelNSAppClient, labelIdentityExport.Spec.LabelIdentities.NormalizedLabels)
-			}
-		}
-	}
-}
-
-func TestLabelIdentityReconciler_handlePodDeleteEvent(t *testing.T) {
-	remoteMgr := commonarea.NewRemoteCommonAreaManager("test-clusterset", common.ClusterID(localClusterID), "kube-system")
-	remoteMgr.Start()
-	defer remoteMgr.Stop()
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(podA, ns).Build()
-	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects().Build()
-
-	_ = commonarea.NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", leaderNamespace)
-	mcReconciler := NewMemberClusterSetReconciler(fakeClient, scheme, "default")
-	mcReconciler.SetRemoteCommonAreaManager(remoteMgr)
-	commonAreaGetter := mcReconciler
-	commonArea, localClusterID, _ := commonAreaGetter.GetRemoteCommonAreaAndLocalID()
-	r := NewLabelIdentityReconciler(fakeClient, scheme, commonAreaGetter)
-
-	if _, err := r.Reconcile(ctx, podReq); err != nil {
-		t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
-	}
-
-	r.Client.Delete(ctx, podA, &client.DeleteOptions{})
-	if _, err := r.Reconcile(ctx, podReq); err != nil {
-		t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
-	} else {
-		if _, ok := r.podLabelCache[podNamespacedName]; ok {
-			t.Errorf("LabelIdentity Reconciler failed to delete r.podLabelCache[%s]", podNamespacedName)
-		}
-		if podSet, ok := r.labelToPodsCache[normalizedLabelNSAppClient]; ok && podSet.Has(podNamespacedName) {
-			t.Errorf("LabelIdentity Reconciler failed to delete %s in r.labelToPodsCache[%s]", podNamespacedName, normalizedLabelNSAppClient)
-		}
-		labelIdentityExport := &mcsv1alpha1.ResourceExport{}
-		err := commonArea.Get(ctx, types.NamespacedName{Namespace: commonArea.GetNamespace(), Name: getResourceExportNameForLabelIdentity(localClusterID)}, labelIdentityExport)
-		if err != nil {
-			t.Errorf("LabelIdentity Reconciler should create new LabelIdentityExport successfully but got error = %v", err)
-		} else {
-			for _, normalizedLabel := range labelIdentityExport.Spec.LabelIdentities.NormalizedLabels {
-				if normalizedLabel == normalizedLabelNSAppClient {
-					t.Errorf("LabelIdentity Reconciler create LabelIdentityExport incorrectly. Should not include %s, ActLabels:%s", normalizedLabelNSAppClient, labelIdentityExport.Spec.LabelIdentities.NormalizedLabels)
-					break
-				}
-			}
-		}
-	}
-}
-
-func TestLabelIdentityReconciler_handleNSUpdateEvent(t *testing.T) {
-	remoteMgr := commonarea.NewRemoteCommonAreaManager("test-clusterset", common.ClusterID(localClusterID), "kube-system")
-	remoteMgr.Start()
-	defer remoteMgr.Stop()
-
-	nsReq := ctrl.Request{NamespacedName: types.NamespacedName{
-		Name: "ns",
-	}}
-
-	newNS := &v1.Namespace{
+	newNS = &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "ns",
 			Labels: map[string]string{
@@ -226,51 +56,158 @@ func TestLabelIdentityReconciler_handleNSUpdateEvent(t *testing.T) {
 		},
 	}
 
-	normalizedLabelNSAdminAppClient := "namespace:kubernetes.io/metadata.name=ns,level=admin&pod:app=client"
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(podA, ns).Build()
-	fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects().Build()
-
-	_ = commonarea.NewFakeRemoteCommonArea(scheme, remoteMgr, fakeRemoteClient, "leader-cluster", leaderNamespace)
-	mcReconciler := NewMemberClusterSetReconciler(fakeClient, scheme, "default")
-	mcReconciler.SetRemoteCommonAreaManager(remoteMgr)
-	commonAreaGetter := mcReconciler
-	commonArea, localClusterID, _ := commonAreaGetter.GetRemoteCommonAreaAndLocalID()
-	r := NewLabelIdentityReconciler(fakeClient, scheme, commonAreaGetter)
-	if _, err := r.Reconcile(ctx, podReq); err != nil {
-		t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
+	pod = &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "ns",
+			Name:      "pod",
+			Labels: map[string]string{
+				"app": "client",
+			},
+		},
 	}
 
-	r.Client.Update(ctx, newNS, &client.UpdateOptions{})
-	if _, err := r.Reconcile(ctx, nsReq); err != nil {
-		t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
-	} else {
-		if podLabelIdentity, ok := r.podLabelCache[podNamespacedName]; !ok || podLabelIdentity != normalizedLabelNSAdminAppClient {
-			t.Errorf("LabelIdentity Reconciler failed to store %s in r.podLabelCache[%s]", normalizedLabelNSAdminAppClient, podNamespacedName)
-		}
-		if podSet, ok := r.labelToPodsCache[normalizedLabelNSAdminAppClient]; !ok || !podSet.Has(podNamespacedName) {
-			t.Errorf("LabelIdentity Reconciler failed to store %s in r.labelToPodsCache[%s]", podNamespacedName, normalizedLabelNSAdminAppClient)
-		}
-		if podSet, ok := r.labelToPodsCache[normalizedLabelNSAppClient]; ok && !podSet.Has(podNamespacedName) {
-			t.Errorf("LabelIdentity Reconciler failed to delete %s in r.labelToPodsCache[%s]", podNamespacedName, normalizedLabelNSAppClient)
-		}
-		labelIdentityExport := &mcsv1alpha1.ResourceExport{}
-		err := commonArea.Get(ctx, types.NamespacedName{Namespace: commonArea.GetNamespace(), Name: getResourceExportNameForLabelIdentity(localClusterID)}, labelIdentityExport)
-		if err != nil {
-			t.Errorf("LabelIdentity Reconciler should create new LabelIdentityExport successfully but got error = %v", err)
+	newPod = &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "ns",
+			Name:      "pod",
+			Labels: map[string]string{
+				"app": "db",
+			},
+		},
+	}
+
+	normalizedLabelDB    = "namespace:kubernetes.io/metadata.name=ns&pod:app=db"
+	normalizedLabelAdmin = "namespace:kubernetes.io/metadata.name=ns,level=admin&pod:app=client"
+
+	podNamespacedName = &types.NamespacedName{Namespace: "ns", Name: "pod"}
+	nsNamespacedName  = &types.NamespacedName{Namespace: "", Name: "ns"}
+)
+
+func TestLabelIdentityReconciler(t *testing.T) {
+	tests := []struct {
+		name                 string
+		existPod             *v1.Pod
+		existNS              *v1.Namespace
+		newPod               *v1.Pod
+		newNS                *v1.Namespace
+		podNamespacedName    *types.NamespacedName
+		nsNamespaceName      *types.NamespacedName
+		expNormalizedLabel   string
+		expLabelsToPodsCache map[string]sets.String
+		expPodLabelCache     map[string]string
+		event                int
+	}{
+		{
+			"pod add event",
+			pod,
+			ns,
+			nil,
+			nil,
+			podNamespacedName,
+			nil,
+			normalizedLabel,
+			map[string]sets.String{normalizedLabel: sets.NewString(podNamespacedName.String())},
+			map[string]string{podNamespacedName.String(): normalizedLabel},
+			addEvent,
+		},
+		{
+			"pod update event",
+			pod,
+			ns,
+			newPod,
+			nil,
+			podNamespacedName,
+			nil,
+			normalizedLabelDB,
+			map[string]sets.String{normalizedLabelDB: sets.NewString(podNamespacedName.String())},
+			map[string]string{podNamespacedName.String(): normalizedLabelDB},
+			updateEvent,
+		},
+		{
+			"pod delete event",
+			pod,
+			ns,
+			nil,
+			nil,
+			podNamespacedName,
+			nil,
+			"",
+			map[string]sets.String{},
+			map[string]string{},
+			deleteEvent,
+		},
+		{
+			"ns update event",
+			pod,
+			ns,
+			nil,
+			newNS,
+			nil,
+			nsNamespacedName,
+			normalizedLabelAdmin,
+			map[string]sets.String{normalizedLabelAdmin: sets.NewString(podNamespacedName.String())},
+			map[string]string{podNamespacedName.String(): normalizedLabelAdmin},
+			updateEvent,
+		},
+	}
+
+	for _, tt := range tests {
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.existPod, tt.existNS).Build()
+		fakeRemoteClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+		commonArea := commonarea.NewFakeRemoteCommonArea(fakeRemoteClient, "leader-cluster", localClusterID, leaderNamespace)
+		mcReconciler := NewMemberClusterSetReconciler(fakeClient, scheme, "default")
+		mcReconciler.SetRemoteCommonArea(commonArea)
+		r := NewLabelIdentityReconciler(fakeClient, scheme, mcReconciler)
+
+		var req ctrl.Request
+		if tt.podNamespacedName != nil {
+			req = ctrl.Request{NamespacedName: *tt.podNamespacedName}
 		} else {
-			findAdminClient := false
-			findClient := false
-			for _, normalizedLabel := range labelIdentityExport.Spec.LabelIdentities.NormalizedLabels {
-				if normalizedLabel == normalizedLabelNSAdminAppClient {
-					findAdminClient = true
-				}
-				if normalizedLabel == normalizedLabelNSAppClient {
-					findClient = true
-				}
+			req = ctrl.Request{NamespacedName: *tt.nsNamespaceName}
+		}
+		if _, err := r.Reconcile(ctx, req); err != nil {
+			t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
+			continue
+		}
+
+		if tt.event == updateEvent {
+			if tt.newPod != nil {
+				r.Client.Update(ctx, tt.newPod, &client.UpdateOptions{})
+			} else {
+				r.Client.Update(ctx, tt.newNS, &client.UpdateOptions{})
 			}
-			if !findAdminClient || findClient {
-				t.Errorf("LabelIdentity Reconciler create LabelIdentityExport incorrectly. Should include %s and not include %s, ActLabels:%s", normalizedLabelNSAdminAppClient, normalizedLabelNSAppClient, labelIdentityExport.Spec.LabelIdentities.NormalizedLabels)
+			if _, err := r.Reconcile(ctx, req); err != nil {
+				t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
+				continue
+			}
+		} else if tt.event == deleteEvent {
+			r.Client.Delete(ctx, tt.existPod, &client.DeleteOptions{})
+			if _, err := r.Reconcile(ctx, req); err != nil {
+				t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
+				continue
+			}
+		}
+
+		if !reflect.DeepEqual(r.labelToPodsCache, tt.expLabelsToPodsCache) {
+			t.Errorf("LabelIdentity Reconciler operated labelToPodsCache incorrectly. Exp: %s, Act: %s", tt.expLabelsToPodsCache, r.labelToPodsCache)
+		}
+		if !reflect.DeepEqual(r.podLabelCache, tt.expPodLabelCache) {
+			t.Errorf("LabelIdentity Reconciler operated podLabelCache incorrectly. Exp: %s, Act: %s", tt.expPodLabelCache, r.podLabelCache)
+		}
+
+		actLabelIdentityExport := &mcsv1alpha1.ResourceExport{}
+		err := commonArea.Get(ctx, types.NamespacedName{Namespace: commonArea.GetNamespace(), Name: getResourceExportNameForLabelIdentity(localClusterID, tt.expNormalizedLabel)}, actLabelIdentityExport)
+		if err == nil {
+			if actLabelIdentityExport.Spec.LabelIdentity.NormalizedLabel != tt.expNormalizedLabel {
+				t.Errorf("LabelIdentity Reconciler create LabelIdentity kind of ResourceExport incorrectly. ExpLabel:%s, ActLabel:%s", tt.expNormalizedLabel, actLabelIdentityExport.Spec.LabelIdentity.NormalizedLabel)
+			}
+		} else {
+			if tt.event == deleteEvent {
+				if !apierrors.IsNotFound(err) {
+					t.Errorf("LabelIdentity Reconciler expects not found error but got error = %v", err)
+				}
+			} else {
+				t.Errorf("Expected a LabelIdentity kind of ResourceExport but got error = %v", err)
 			}
 		}
 	}

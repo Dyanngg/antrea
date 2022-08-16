@@ -2822,10 +2822,8 @@ spec:
               labelIdentities:
                 description: If exported resource is LabelIdentities of a cluster.
                 properties:
-                  normalizedLabels:
-                    items:
-                      type: string
-                    type: array
+                  normalizedLabel:
+                    type: string
                 type: object
               name:
                 description: Name of exported resource.

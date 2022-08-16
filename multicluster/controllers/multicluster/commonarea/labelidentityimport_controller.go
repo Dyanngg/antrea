@@ -35,7 +35,7 @@ import (
 	"antrea.io/antrea/multicluster/controllers/multicluster/common"
 )
 
-// LabelIdentityResourceImportReconciler reconciles a LabelIdentity kind ResourceImport object in the member cluster.
+// LabelIdentityResourceImportReconciler reconciles a LabelIdentity kind of ResourceImport object in the member cluster.
 type LabelIdentityResourceImportReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme
@@ -61,11 +61,11 @@ func NewLabelIdentityResourceImportReconciler(client client.Client, scheme *runt
 
 func resourceImportIndexerKeyFunc(obj interface{}) (string, error) {
 	ri := obj.(multiclusterv1alpha1.ResourceImport)
-	return common.NamespacedName("", ri.Name), nil
+	return common.NamespacedName(ri.Namespace, ri.Name), nil
 }
 
 func (r *LabelIdentityResourceImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	klog.V(2).InfoS("Reconciling LabelIdentity kind ResourceImport", "resourceImport", req.NamespacedName)
+	klog.V(2).InfoS("Reconciling LabelIdentity kind of ResourceImport", "resourceImport", req.NamespacedName)
 	if r.localClusterClient == nil {
 		return ctrl.Result{}, errors.New("localClusterClient has not been initialized properly, no local cluster client")
 	}
@@ -74,25 +74,24 @@ func (r *LabelIdentityResourceImportReconciler) Reconcile(ctx context.Context, r
 	}
 	var labelIdentityResImport multiclusterv1alpha1.ResourceImport
 	err := r.remoteCommonArea.Get(ctx, req.NamespacedName, &labelIdentityResImport)
-	isDeleted := apierrors.IsNotFound(err)
 	if err != nil {
-		if !isDeleted {
-			klog.ErrorS(err, "Unable to fetch LabelIdentity kind ResourceImport", "resourceImport", req.NamespacedName.String())
+		if !apierrors.IsNotFound(err) {
+			klog.ErrorS(err, "Unable to fetch LabelIdentity kind of ResourceImport", "resourceImport", req.NamespacedName)
 			return ctrl.Result{}, err
 		}
 		labelIdentityResImportObj, exist, _ := r.installedLabelImports.GetByKey(req.NamespacedName.String())
 		if !exist {
-			// Stale controller will clean up any stale Label Identities
-			klog.ErrorS(err, "No cached data for LabelIdentity kind ResourceImport", "resoureImport", req.NamespacedName)
+			// Stale controller will clean up any stale LabelIdentities
+			klog.ErrorS(err, "No cached data for LabelIdentity kind of ResourceImport", "resoureImport", req.NamespacedName)
 			return ctrl.Result{}, nil
 		}
 		labelIdentityResImport = labelIdentityResImportObj.(multiclusterv1alpha1.ResourceImport)
 		return r.handleLabelIdentityImpDelete(ctx, &labelIdentityResImport)
 	}
-	return r.handleLabelIdentityImpUpdate(ctx, &labelIdentityResImport)
+	return r.handleLabelIdentityImpCreateOrUpdate(ctx, &labelIdentityResImport)
 }
 
-func (r *LabelIdentityResourceImportReconciler) handleLabelIdentityImpUpdate(ctx context.Context,
+func (r *LabelIdentityResourceImportReconciler) handleLabelIdentityImpCreateOrUpdate(ctx context.Context,
 	labelResImp *multiclusterv1alpha1.ResourceImport) (ctrl.Result, error) {
 	labelIdentityName := types.NamespacedName{
 		Name: labelResImp.Name,
@@ -133,20 +132,15 @@ func (r *LabelIdentityResourceImportReconciler) handleLabelIdentityImpUpdate(ctx
 
 func (r *LabelIdentityResourceImportReconciler) handleLabelIdentityImpDelete(ctx context.Context,
 	labelResImp *multiclusterv1alpha1.ResourceImport) (ctrl.Result, error) {
-	labelIdentityName := types.NamespacedName{
-		Name: labelResImp.Name,
+	klog.V(2).InfoS("Deleting LabelIdentity corresponding to LabelIdentity kind of ResourceImport", "resourceImport", klog.KObj(labelResImp))
+	labelIdentity := &multiclusterv1alpha1.LabelIdentity{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: labelResImp.Name,
+		},
 	}
-	klog.V(2).InfoS("Deleting LabelIdentity corresponding to LabelIdentity kind ResourceImport", "resourceImport", klog.KObj(labelResImp))
-	labelIdentity := &multiclusterv1alpha1.LabelIdentity{}
-	err := r.localClusterClient.Get(ctx, labelIdentityName, labelIdentity)
-	if err != nil {
-		klog.V(2).InfoS("Unable to fetch LabelIdentity", "labelIdentity", labelIdentityName.Name, "err", err)
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	err = r.localClusterClient.Delete(ctx, labelIdentity, &client.DeleteOptions{})
-	if err != nil {
-		klog.ErrorS(err, "Failed to delete LabelIdentity", "labelIdentity", labelIdentityName.Name)
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	if err := r.localClusterClient.Delete(ctx, labelIdentity, &client.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+		klog.ErrorS(err, "Failed to delete LabelIdentity", "labelIdentity", labelIdentity.Name)
+		return ctrl.Result{}, err
 	}
 	r.installedLabelImports.Delete(*labelResImp)
 	return ctrl.Result{}, nil

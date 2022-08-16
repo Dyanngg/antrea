@@ -25,7 +25,7 @@ const (
 	ServiceKind                    = "Service"
 	EndpointsKind                  = "Endpoints"
 	AntreaClusterNetworkPolicyKind = "AntreaClusterNetworkPolicy"
-	LabelIdentityKind              = "LabelIdentities"
+	LabelIdentityKind              = "LabelIdentity"
 	ServiceImportKind              = "ServiceImport"
 	ClusterInfoKind                = "ClusterInfo"
 

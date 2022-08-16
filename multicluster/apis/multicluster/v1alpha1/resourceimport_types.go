@@ -62,10 +62,6 @@ type ResourceImportSpec struct {
 	ExternalEntity *ExternalEntityImport `json:"externalentity,omitempty"`
 	// If imported resource is AntreaClusterNetworkPolicy.
 	ClusterNetworkPolicy *v1alpha1.ClusterNetworkPolicySpec `json:"clusternetworkpolicy,omitempty"`
-	// If imported resource is ANP.
-	// TODO:
-	// ANP uses float64 as priority.  Type float64 is discouraged by k8s, and is not supported by controller-gen tools.
-	// NetworkPolicy *v1alpha1.NetworkPolicySpec `json:"networkpolicy,omitempty"`
 	// If imported resource kind is LabelIdentity.
 	LabelIdentity *LabelIdentitySpec `json:"labelidentity,omitempty"`
 	// If imported resource kind is unknown.

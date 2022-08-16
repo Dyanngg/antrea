@@ -23,7 +23,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=labelidentities,scope=Cluster
 
-// LabelIdenity is an imported label identity from the ClusterSet.
+// LabelIdentity is an imported label identity from the ClusterSet.
 // For each unique label identity, a LabelIdentity will be created in the member cluster.
 type LabelIdentity struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -35,6 +35,7 @@ type LabelIdentity struct {
 type LabelIdentitySpec struct {
 	// Label is the normalized string of a label identity.
 	// The format of normalized label identity is `namespace:(?P<nslabels>(.)*)&pod:(?P<podlabels>(.)*)`
+	// E.g., `namespace:kubernetes.io/metadata.name=kube-system&pod:app=db`
 	Label string `json:"label,omitempty"`
 	// ID is the id allocated for the label identity by the leader cluster.
 	ID uint32 `json:"id,omitempty"`
@@ -42,7 +43,7 @@ type LabelIdentitySpec struct {
 
 // +kubebuilder:object:root=true
 
-// LabelIdentityList contains a list of LabelIdentities.
+// LabelIdentityList contains a list of LabelIdentity.
 type LabelIdentityList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
