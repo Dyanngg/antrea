@@ -117,14 +117,11 @@ func (r *LabelIdentityResourceImportReconciler) handleLabelIdentityImpCreateOrUp
 			return ctrl.Result{}, err
 		}
 		r.installedLabelImports.Add(*labelResImp)
-	} else {
-		// ID assigned for LabelIdentity could change in case of leader controller restart
-		if labelIdentity.Spec.ID != labelResImp.Spec.LabelIdentity.ID {
-			labelIdentity.Spec.ID = labelResImp.Spec.LabelIdentity.ID
-			if err = r.localClusterClient.Update(ctx, labelIdentity, &client.UpdateOptions{}); err != nil {
-				klog.ErrorS(err, "Failed to update LabelIdentity", "clusterID", r.localClusterID, "label", labelResImp.Spec.LabelIdentity.Label)
-				return ctrl.Result{}, err
-			}
+	} else if labelIdentity.Spec.ID != labelResImp.Spec.LabelIdentity.ID {
+		labelIdentity.Spec.ID = labelResImp.Spec.LabelIdentity.ID
+		if err = r.localClusterClient.Update(ctx, labelIdentity, &client.UpdateOptions{}); err != nil {
+			klog.ErrorS(err, "Failed to update LabelIdentity", "clusterID", r.localClusterID, "label", labelResImp.Spec.LabelIdentity.Label)
+			return ctrl.Result{}, err
 		}
 	}
 	return ctrl.Result{}, nil

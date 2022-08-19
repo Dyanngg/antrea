@@ -29,20 +29,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	mcsv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
+	"antrea.io/antrea/multicluster/controllers/multicluster/common"
 )
 
 var (
 	normalizedLabel = "namespace:kubernetes.io/metadata.name=ns&pod:app=client"
+	labelHash       = common.HashLabelIdentity(normalizedLabel)
 
 	resExpNamespacedName = types.NamespacedName{
-		Namespace: "default",
-		Name:      localClusterID + "-" + normalizedLabel,
+		Namespace: leaderNamespace,
+		Name:      localClusterID + "-" + labelHash,
 	}
 
 	labelIdentityResExp = &mcsv1alpha1.ResourceExport{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      localClusterID + "-" + normalizedLabel,
+			Namespace: leaderNamespace,
+			Name:      localClusterID + "-" + labelHash,
 		},
 		Spec: mcsv1alpha1.ResourceExportSpec{
 			ClusterID: localClusterID,
@@ -68,8 +70,8 @@ func TestLabelIdentityResourceExportReconclie(t *testing.T) {
 			labelIdentityResExp,
 			resExpNamespacedName,
 			normalizedLabel,
-			map[string]sets.String{normalizedLabel: sets.NewString(localClusterID)},
-			map[string]sets.String{localClusterID: sets.NewString(normalizedLabel)},
+			map[string]sets.String{labelHash: sets.NewString(localClusterID)},
+			map[string]sets.String{localClusterID: sets.NewString(labelHash)},
 			false,
 		},
 		{
@@ -85,7 +87,7 @@ func TestLabelIdentityResourceExportReconclie(t *testing.T) {
 
 	for _, tt := range tests {
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.existResExp).Build()
-		r := NewLabelIdentityExportReconciler(fakeClient, scheme)
+		r := NewLabelIdentityExportReconciler(fakeClient, scheme, leaderNamespace)
 
 		resExpReq := ctrl.Request{NamespacedName: tt.resExpNamespacedName}
 		if _, err := r.Reconcile(ctx, resExpReq); err != nil {
@@ -109,10 +111,8 @@ func TestLabelIdentityResourceExportReconclie(t *testing.T) {
 
 		actLabelIdentityResImp := &mcsv1alpha1.ResourceImport{}
 		lastIdx := strings.LastIndex(tt.resExpNamespacedName.Name, "-")
-		parsedNormalizedLabel := tt.resExpNamespacedName.Name[lastIdx+1:]
-		err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: hashLabelIdentity(parsedNormalizedLabel)}, actLabelIdentityResImp)
-
-		if err == nil {
+		parsedLabelHash := tt.resExpNamespacedName.Name[lastIdx+1:]
+		if err := fakeClient.Get(ctx, types.NamespacedName{Namespace: "default", Name: parsedLabelHash}, actLabelIdentityResImp); err == nil {
 			if tt.expNormalizedLabel != actLabelIdentityResImp.Spec.LabelIdentity.Label {
 				t.Errorf("LabelIdentityExport Reconciler create LabelIdentity kind of ResourceImport incorrectly. ExpLabel:%s, ActLabel:%s", tt.expNormalizedLabel, actLabelIdentityResImp.Spec.LabelIdentity.Label)
 			}

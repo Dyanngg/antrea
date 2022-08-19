@@ -93,7 +93,8 @@ func runLeader(o *Options) error {
 	}
 	labelExportReconciler := multiclustercontrollers.NewLabelIdentityExportReconciler(
 		mgr.GetClient(),
-		mgr.GetScheme())
+		mgr.GetScheme(),
+		env.GetPodNamespace())
 	if err = labelExportReconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("error creating LabelIdentityExport controller: %v", err)
 	}

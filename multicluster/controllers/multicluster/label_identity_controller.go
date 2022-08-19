@@ -310,5 +310,5 @@ func getNormalizedLabel(nsLabels, podLabels map[string]string) string {
 // getResourceExportNameForLabelIdentity retrieves the ResourceExport name for exporting
 // label identities in that cluster.
 func getResourceExportNameForLabelIdentity(clusterID string, normalizedLabel string) string {
-	return clusterID + "-" + normalizedLabel
+	return clusterID + "-" + common.HashLabelIdentity(normalizedLabel)
 }
