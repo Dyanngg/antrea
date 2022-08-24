@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,16 +29,19 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	mcsv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
 	"antrea.io/antrea/multicluster/controllers/multicluster/commonarea"
 )
 
-var (
-	addEvent    = 0
-	updateEvent = 1
-	deleteEvent = 2
+const (
+	addEvent = iota
+	updateEvent
+	deleteEvent
+)
 
+var (
 	ns = &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "ns",
@@ -76,8 +80,8 @@ var (
 		},
 	}
 
-	normalizedLabelDB    = "namespace:kubernetes.io/metadata.name=ns&pod:app=db"
-	normalizedLabelAdmin = "namespace:kubernetes.io/metadata.name=ns,level=admin&pod:app=client"
+	normalizedLabelDB    = "ns:kubernetes.io/metadata.name=ns&pod:app=db"
+	normalizedLabelAdmin = "ns:kubernetes.io/metadata.name=ns,level=admin&pod:app=client"
 
 	podNamespacedName = &types.NamespacedName{Namespace: "ns", Name: "pod"}
 	nsNamespacedName  = &types.NamespacedName{Namespace: "", Name: "ns"}
@@ -189,10 +193,10 @@ func TestLabelIdentityReconciler(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(r.labelToPodsCache, tt.expLabelsToPodsCache) {
-			t.Errorf("LabelIdentity Reconciler operated labelToPodsCache incorrectly. Exp: %s, Act: %s", tt.expLabelsToPodsCache, r.labelToPodsCache)
+			t.Errorf("Unexpected labelToPodsCache in LabelIdentity Reconciler in step %s. Exp: %s, Act: %s", tt.name, tt.expLabelsToPodsCache, r.labelToPodsCache)
 		}
 		if !reflect.DeepEqual(r.podLabelCache, tt.expPodLabelCache) {
-			t.Errorf("LabelIdentity Reconciler operated podLabelCache incorrectly. Exp: %s, Act: %s", tt.expPodLabelCache, r.podLabelCache)
+			t.Errorf("Unexpected podLabelCache in LabelIdentity Reconciler in step %s. Exp: %s, Act: %s", tt.name, tt.expPodLabelCache, r.podLabelCache)
 		}
 
 		actLabelIdentityExport := &mcsv1alpha1.ResourceExport{}
@@ -211,4 +215,21 @@ func TestLabelIdentityReconciler(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestNamespaceMapFunc(t *testing.T) {
+	ns := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-ns",
+		},
+	}
+	expReq := []reconcile.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Name: "test-ns",
+			},
+		},
+	}
+	actualReq := namespaceMapFunc(ns)
+	assert.ElementsMatch(t, expReq, actualReq)
 }

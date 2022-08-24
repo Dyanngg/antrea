@@ -17,12 +17,12 @@ limitations under the License.
 package multicluster
 
 import (
-	"container/list"
 	"context"
 	"fmt"
 	"strings"
 	"sync"
 
+	"golang.org/x/tools/container/intsets"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -192,12 +192,23 @@ func (r *LabelIdentityExportReconciler) handleLabelIdentityDelete(ctx context.Co
 // if the creation of its corresponding ResourceImport succeeded.
 func (r *LabelIdentityExportReconciler) handleLabelIdentityAdd(ctx context.Context,
 	labelHash, label, clusterID, namespace string) bool {
+	labelIdentityResImport := &mcsv1alpha1.ResourceImport{}
+	ResImpKey := types.NamespacedName{Name: labelHash, Namespace: namespace}
+	if err := r.Client.Get(ctx, ResImpKey, labelIdentityResImport); err == nil {
+		idAllocated := labelIdentityResImport.Spec.LabelIdentity.ID
+		if err := r.allocator.setAllocated(idAllocated); err == nil {
+			return true
+		} else if err := r.Client.Delete(ctx, labelIdentityResImport, &client.DeleteOptions{}); err != nil {
+			// ResourceImport with stale label identity to ID mapping must be deleted.
+			klog.ErrorS(err, "Failed to delete outdated LabelIdentity kind of ResourceImport for label", "label", label)
+		}
+	}
 	id, err := r.allocator.allocate()
 	if err != nil {
 		klog.ErrorS(err, "Failed to allocate ID for new labels", "label", labelHash)
 		return false
 	}
-	labelIdentityResImport := getLabelIdentityResImport(labelHash, label, namespace, id)
+	labelIdentityResImport = getLabelIdentityResImport(labelHash, label, namespace, id)
 	if err := r.Client.Create(ctx, labelIdentityResImport, &client.CreateOptions{}); err != nil {
 		klog.ErrorS(err, "Failed to create LabelIdentity kind of ResourceImport for new label", "label", label)
 		r.allocator.release(id)
@@ -244,18 +255,26 @@ func parseLabelIdentityExportNamespacedName(namespacedName types.NamespacedName)
 // idAllocator allocates a unqiue uint32 ID for each label identity.
 type idAllocator struct {
 	sync.Mutex
-	maxID        uint32
-	nextID       uint32
-	availableIDs *list.List
+	maxID                uint32
+	nextID               uint32
+	preAllocatedIDs      intsets.Sparse
+	availableForReuseIDs intsets.Sparse
 }
 
+// allocate will first try to allocate an ID within the pool of IDs that has been
+// released (due to label identity deletions). If there's no such IDs, it will
+// then allocate the first ID that has not been pre-allocated, or return an error
+// if all IDs have been exhausted.
 func (a *idAllocator) allocate() (uint32, error) {
 	a.Lock()
 	defer a.Unlock()
 
-	front := a.availableIDs.Front()
-	if front != nil {
-		return a.availableIDs.Remove(front).(uint32), nil
+	available := -1
+	if ok := a.availableForReuseIDs.TakeMin(&available); ok {
+		return uint32(available), nil
+	}
+	for a.preAllocatedIDs.Has(int(a.nextID)) {
+		a.nextID += 1
 	}
 	if a.nextID <= a.maxID {
 		allocated := a.nextID
@@ -265,18 +284,38 @@ func (a *idAllocator) allocate() (uint32, error) {
 	return 0, fmt.Errorf("no ID available")
 }
 
+// setAllocated reserves IDs allocated during the previous round of label identity
+// ResourceExport reconcilaion.
+func (a *idAllocator) setAllocated(id uint32) error {
+	a.Lock()
+	defer a.Unlock()
+
+	if a.availableForReuseIDs.Has(int(id)) {
+		a.availableForReuseIDs.Remove(int(id))
+		return nil
+	} else if id >= a.nextID {
+		a.preAllocatedIDs.Insert(int(id))
+		return nil
+	}
+	return fmt.Errorf("ID %d has already been allocated", id)
+}
+
 func (a *idAllocator) release(id uint32) {
 	a.Lock()
 	defer a.Unlock()
 
-	a.availableIDs.PushBack(id)
+	a.availableForReuseIDs.Insert(int(id))
+	if a.preAllocatedIDs.Has(int(a.nextID)) {
+		a.preAllocatedIDs.Remove(int(id))
+	}
 }
 
 func newIDAllocator(minID, maxID uint32) *idAllocator {
-	availableIDs := list.New()
+	preAllocated, availableIDs := intsets.Sparse{}, intsets.Sparse{}
 	return &idAllocator{
-		nextID:       minID,
-		maxID:        maxID,
-		availableIDs: availableIDs,
+		nextID:               minID,
+		maxID:                maxID,
+		preAllocatedIDs:      preAllocated,
+		availableForReuseIDs: availableIDs,
 	}
 }

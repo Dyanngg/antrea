@@ -46,7 +46,7 @@ func (c *FakeLabelIdentities) Get(ctx context.Context, name string, options v1.G
 	return obj.(*v1alpha1.LabelIdentity), err
 }
 
-// List takes label and field selectors, and returns the list of LabelIdentity that match those selectors.
+// List takes label and field selectors, and returns the list of LabelIdentities that match those selectors.
 func (c *FakeLabelIdentities) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.LabelIdentityList, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewRootListAction(labelidentitiesResource, labelidentitiesKind, opts), &v1alpha1.LabelIdentityList{})

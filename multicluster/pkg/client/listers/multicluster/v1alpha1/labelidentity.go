@@ -44,7 +44,7 @@ func NewLabelIdentityLister(indexer cache.Indexer) LabelIdentityLister {
 	return &labelIdentityLister{indexer: indexer}
 }
 
-// List lists all LabelIdentity in the indexer.
+// List lists all LabelIdentities in the indexer.
 func (s *labelIdentityLister) List(selector labels.Selector) (ret []*v1alpha1.LabelIdentity, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1alpha1.LabelIdentity))

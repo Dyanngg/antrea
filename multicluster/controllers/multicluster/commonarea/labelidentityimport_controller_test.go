@@ -42,7 +42,7 @@ var (
 		},
 		Spec: mcsv1alpha1.ResourceImportSpec{
 			LabelIdentity: &mcsv1alpha1.LabelIdentitySpec{
-				Label: "namespace:kubernetes.io/metadata.name=ns&pod:app=client",
+				Label: "ns:kubernetes.io/metadata.name=ns&pod:app=client",
 				ID:    uint32(1),
 			},
 		},
@@ -55,7 +55,7 @@ var (
 		},
 		Spec: mcsv1alpha1.ResourceImportSpec{
 			LabelIdentity: &mcsv1alpha1.LabelIdentitySpec{
-				Label: "namespace:kubernetes.io/metadata.name=ns&pod:app=client",
+				Label: "ns:kubernetes.io/metadata.name=ns&pod:app=client",
 				ID:    uint32(2),
 			},
 		},
@@ -66,7 +66,7 @@ var (
 			Name: resImpNamespacedName.Name,
 		},
 		Spec: mcsv1alpha1.LabelIdentitySpec{
-			Label: "namespace:kubernetes.io/metadata.name=ns&pod:app=client",
+			Label: "ns:kubernetes.io/metadata.name=ns&pod:app=client",
 			ID:    uint32(1),
 		},
 	}
@@ -76,7 +76,7 @@ var (
 			Name: resImpNamespacedName.Name,
 		},
 		Spec: mcsv1alpha1.LabelIdentitySpec{
-			Label: "namespace:kubernetes.io/metadata.name=ns&pod:app=client",
+			Label: "ns:kubernetes.io/metadata.name=ns&pod:app=client",
 			ID:    uint32(2),
 		},
 	}

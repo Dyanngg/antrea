@@ -114,7 +114,7 @@ func (r *LabelIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 	nsLabels, podLabels := ns.Labels, pod.Labels
-	return ctrl.Result{}, r.onPodCreateOrUpdate(ctx, req.NamespacedName.String(), getNormalizedLabel(nsLabels, podLabels), pod.Spec.HostNetwork)
+	return ctrl.Result{}, r.onPodCreateOrUpdate(ctx, req.NamespacedName.String(), getNormalizedLabel(nsLabels, podLabels))
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -156,7 +156,7 @@ func (r *LabelIdentityReconciler) onNamespaceCreateOrUpdate(ctx context.Context,
 		podKey, updatedLabel := p.Namespace+"/"+p.Name, getNormalizedLabel(nsLabels, p.Labels)
 
 		klog.V(4).InfoS("Re-processing Pod for label identity sync due to Namespace label updates", "pod", podKey)
-		if err := r.onPodCreateOrUpdate(ctx, podKey, updatedLabel, p.Spec.HostNetwork); err != nil {
+		if err := r.onPodCreateOrUpdate(ctx, podKey, updatedLabel); err != nil {
 			return err
 		}
 	}
@@ -167,9 +167,7 @@ func (r *LabelIdentityReconciler) onNamespaceCreateOrUpdate(ctx context.Context,
 // updates label identity ResourceExport if necessary (the Pod deletion event
 // causes a label identity to no longer being present in the cluster).
 func (r *LabelIdentityReconciler) onPodDelete(ctx context.Context, podKey string) error {
-	// For label identity, Pod deletion has the same logic as changing a Pod to
-	// HostNetwork. So pass hostNetwork=true here.
-	_, labelToDelete := r.getLabelToUpdate(podKey, "", true)
+	_, labelToDelete := r.getLabelToUpdate(podKey, "")
 	if labelToDelete != "" {
 		if err := r.deleteLabelIdentityResourceExport(ctx, labelToDelete); err != nil {
 			return err
@@ -182,8 +180,8 @@ func (r *LabelIdentityReconciler) onPodDelete(ctx context.Context, podKey string
 // updates label identity ResourceExport if necessary (the Pod creation/update
 // event causes a new label identity to appear in the cluster or a label identity
 // to no longer being present in the cluster).
-func (r *LabelIdentityReconciler) onPodCreateOrUpdate(ctx context.Context, podKey, normalizedLabel string, hostNetwork bool) error {
-	labelToAdd, labelToDelete := r.getLabelToUpdate(podKey, normalizedLabel, hostNetwork)
+func (r *LabelIdentityReconciler) onPodCreateOrUpdate(ctx context.Context, podKey, normalizedLabel string) error {
+	labelToAdd, labelToDelete := r.getLabelToUpdate(podKey, normalizedLabel)
 	if labelToDelete != "" {
 		if err := r.deleteLabelIdentityResourceExport(ctx, labelToDelete); err != nil {
 			return err
@@ -197,20 +195,20 @@ func (r *LabelIdentityReconciler) onPodCreateOrUpdate(ctx context.Context, podKe
 	return nil
 }
 
-func (r *LabelIdentityReconciler) getLabelToUpdate(podKey, normalizedLabel string, hostNetwork bool) (labelToAdd string, labelToDelete string) {
+func (r *LabelIdentityReconciler) getLabelToUpdate(podKey, normalizedLabel string) (labelToAdd string, labelToDelete string) {
 	r.labelMutex.RLock()
 	defer r.labelMutex.RUnlock()
 
-	addLabel := func(podKey, normalizedLabel string) string {
+	addPodLabel := func(podKey, normalizedLabel string) string {
 		r.podLabelCache[podKey] = normalizedLabel
 		if _, ok := r.labelToPodsCache[normalizedLabel]; !ok {
 			r.labelToPodsCache[normalizedLabel] = sets.NewString(podKey)
 			return normalizedLabel
 		}
+		r.labelToPodsCache[normalizedLabel].Insert(podKey)
 		return ""
 	}
-
-	deleteLabel := func(podKey, normalizedLabel string) string {
+	deletePodLabel := func(podKey, normalizedLabel string) string {
 		delete(r.podLabelCache, podKey)
 		if podNames, ok := r.labelToPodsCache[normalizedLabel]; ok {
 			podNames.Delete(podKey)
@@ -222,26 +220,13 @@ func (r *LabelIdentityReconciler) getLabelToUpdate(podKey, normalizedLabel strin
 		}
 		return ""
 	}
-
-	oldNormalizedLabel, labelCacheExists := r.podLabelCache[podKey]
-	if !labelCacheExists && hostNetwork {
-		// No update needed for HostNetwork Pod update.
-		return "", ""
+	originalLabel, isCached := r.podLabelCache[podKey]
+	if isCached && originalLabel != normalizedLabel {
+		labelToDelete = deletePodLabel(podKey, originalLabel)
 	}
-	if !labelCacheExists && !hostNetwork {
-		// HostNetwork Pod update to a non-HostNetwork Pod.
-		return addLabel(podKey, normalizedLabel), ""
+	if normalizedLabel != "" {
+		labelToAdd = addPodLabel(podKey, normalizedLabel)
 	}
-	if labelCacheExists && hostNetwork {
-		// Non-HostNetwork Pod update to a HostNetwork Pod.
-		return "", deleteLabel(podKey, oldNormalizedLabel)
-	}
-	// Non-HostNetwork Pod update.
-	if normalizedLabel == oldNormalizedLabel {
-		return "", ""
-	}
-	labelToDelete = deleteLabel(podKey, oldNormalizedLabel)
-	labelToAdd = addLabel(podKey, normalizedLabel)
 	return
 }
 
@@ -304,7 +289,7 @@ func (r *LabelIdentityReconciler) getLabelIdentityResourceExport(resExportNamesp
 }
 
 func getNormalizedLabel(nsLabels, podLabels map[string]string) string {
-	return "namespace:" + labels.FormatLabels(nsLabels) + "&pod:" + labels.FormatLabels(podLabels)
+	return "ns:" + labels.FormatLabels(nsLabels) + "&pod:" + labels.FormatLabels(podLabels)
 }
 
 // getResourceExportNameForLabelIdentity retrieves the ResourceExport name for exporting
