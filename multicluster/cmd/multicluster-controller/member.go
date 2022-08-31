@@ -63,6 +63,7 @@ func runMember(o *Options) error {
 	}
 
 	commonAreaGetter := clusterSetReconciler
+	stopCh := signals.RegisterSignalHandlers()
 	svcExportReconciler := multiclustercontrollers.NewServiceExportReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
@@ -77,6 +78,7 @@ func runMember(o *Options) error {
 	if err = labelIdentityReconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("error creating LabelIdentity controller: %v", err)
 	}
+	go labelIdentityReconciler.Run(stopCh)
 
 	gwReconciler := multiclustercontrollers.NewGatewayReconciler(
 		mgr.GetClient(),
@@ -97,7 +99,6 @@ func runMember(o *Options) error {
 		return fmt.Errorf("error creating Node controller: %v", err)
 	}
 
-	stopCh := signals.RegisterSignalHandlers()
 	staleController := multiclustercontrollers.NewStaleResCleanupController(
 		mgr.GetClient(),
 		mgr.GetScheme(),

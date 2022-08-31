@@ -173,7 +173,6 @@ func TestLabelIdentityReconciler(t *testing.T) {
 			t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
 			continue
 		}
-
 		if tt.event == updateEvent {
 			if tt.newPod != nil {
 				r.Client.Update(ctx, tt.newPod, &client.UpdateOptions{})
@@ -190,6 +189,10 @@ func TestLabelIdentityReconciler(t *testing.T) {
 				t.Errorf("LabelIdentity Reconciler got error during reconciling. error = %v", err)
 				continue
 			}
+		}
+		// Process all Pod label identity sync work items
+		for r.queue.Len() > 0 {
+			r.syncPodLabels()
 		}
 
 		if !reflect.DeepEqual(r.labelToPodsCache, tt.expLabelsToPodsCache) {
