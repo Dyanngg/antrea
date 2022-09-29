@@ -524,6 +524,10 @@ type AppliedTo struct {
 	// Cannot be set with any other selector.
 	// +optional
 	Service *NamespacedName `json:"service,omitempty"`
+	// Define scope of the Pod/NamespaceSelector(s) of this peer.
+	// Can only be used in ingress NetworkPolicyPeers.
+	// +optional
+	Scope PeerScope `json:"scope,omitempty"`
 }
 
 type PeerNamespaces struct {
