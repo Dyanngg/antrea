@@ -239,6 +239,9 @@ type NetworkPolicyController struct {
 	groupingInterfaceSynced func() bool
 
 	labelidentityInterface labelidentity.Interface
+	// Enable Multicluster which allow Antrea-native policies to select peer
+	// from other clusters in a ClusterSet.
+	multiclusterEnabled bool
 	// heartbeatCh is an internal channel for testing. It's used to know whether all tasks have been
 	// processed, and to count executions of each function.
 	heartbeatCh chan heartbeat
@@ -386,7 +389,8 @@ func NewNetworkPolicyController(kubeClient clientset.Interface,
 	addressGroupStore storage.Interface,
 	appliedToGroupStore storage.Interface,
 	internalNetworkPolicyStore storage.Interface,
-	internalGroupStore storage.Interface) *NetworkPolicyController {
+	internalGroupStore storage.Interface,
+	multiclusterEnabled bool) *NetworkPolicyController {
 	n := &NetworkPolicyController{
 		kubeClient:                 kubeClient,
 		crdClient:                  crdClient,
@@ -404,6 +408,7 @@ func NewNetworkPolicyController(kubeClient clientset.Interface,
 		groupingInterface:          groupingInterface,
 		groupingInterfaceSynced:    groupingInterface.HasSynced,
 		labelidentityInterface:     labelidentityInterface,
+		multiclusterEnabled:        multiclusterEnabled,
 	}
 	n.groupingInterface.AddEventHandler(appliedToGroupType, n.enqueueAppliedToGroup)
 	n.groupingInterface.AddEventHandler(addressGroupType, n.enqueueAddressGroup)
@@ -1575,7 +1580,7 @@ func (n *NetworkPolicyController) deleteInternalNetworkPolicy(name string) {
 	internalNetworkPolicy := obj.(*antreatypes.NetworkPolicy)
 	n.internalNetworkPolicyStore.Delete(internalNetworkPolicy.Name)
 	n.cleanupOrphanGroups(internalNetworkPolicy)
-	if features.DefaultFeatureGate.Enabled(features.Multicluster) && internalNetworkPolicy.SourceRef.Type != controlplane.K8sNetworkPolicy {
+	if n.multiclusterEnabled && internalNetworkPolicy.SourceRef.Type != controlplane.K8sNetworkPolicy {
 		n.labelidentityInterface.DeletePolicySelectors(internalNetworkPolicy.Name)
 	}
 	// Enqueue AddressGroups previously used by this NetworkPolicy as their span may change due to the removal.

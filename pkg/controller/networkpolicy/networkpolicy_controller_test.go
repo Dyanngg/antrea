@@ -136,7 +136,8 @@ func newController(objects ...runtime.Object) (*fake.Clientset, *networkPolicyCo
 		addressGroupStore,
 		appliedToGroupStore,
 		internalNetworkPolicyStore,
-		internalGroupStore)
+		internalGroupStore,
+		true)
 	npController.namespaceLister = informerFactory.Core().V1().Namespaces().Lister()
 	npController.namespaceListerSynced = alwaysReady
 	npController.networkPolicyListerSynced = alwaysReady

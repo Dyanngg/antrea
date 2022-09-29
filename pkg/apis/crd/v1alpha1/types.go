@@ -479,6 +479,10 @@ type NetworkPolicyPeer struct {
 	// A NodeSelector cannot be set in AppliedTo field or set with any other selector.
 	// +optional
 	NodeSelector *metav1.LabelSelector `json:"nodeSelector,omitempty"`
+	// Define scope of the Pod/NamespaceSelector(s) of this peer.
+	// Can only be used in ingress NetworkPolicyPeers.
+	// +optional
+	Scope PeerScope `json:"scope,omitempty"`
 }
 
 // AppliedTo describes the grouping selector of workloads in AppliedTo field.
@@ -520,10 +524,6 @@ type AppliedTo struct {
 	// Cannot be set with any other selector.
 	// +optional
 	Service *NamespacedName `json:"service,omitempty"`
-	// Define scope of the Pod/NamespaceSelector(s) of this peer.
-	// Can only be used in ingress NetworkPolicyPeers.
-	// +optional
-	Scope PeerClusterScope `json:"scope,omitempty"`
 }
 
 type PeerNamespaces struct {
@@ -537,10 +537,10 @@ const (
 	NamespaceMatchSelf NamespaceMatchType = "Self"
 )
 
-type PeerClusterScope string
+type PeerScope string
 
 const (
-	ScopeClusterSet PeerClusterScope = "ClusterSet"
+	ScopeClusterSet PeerScope = "ClusterSet"
 )
 
 // IPBlock describes a particular CIDR (Ex. "192.168.1.1/24") that is allowed

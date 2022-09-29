@@ -22,7 +22,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
-	multiclusterv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
+	mcv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
 	mcinformers "antrea.io/antrea/multicluster/pkg/client/informers/externalversions/multicluster/v1alpha1"
 )
 
@@ -77,6 +77,7 @@ func NewLabelIdentityController(index *LabelIdentityIndex,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: c.addLabelIdentity,
 			// LabelIdentities are not expected to have update events after they are created.
+			// Update will be done by deleting existing one and recreate a new LabelIdentity with new ID.
 			UpdateFunc: nil,
 			DeleteFunc: c.deleteLabelIdentity,
 		},
@@ -87,13 +88,14 @@ func NewLabelIdentityController(index *LabelIdentityIndex,
 
 func (c *Controller) Run(stopCh <-chan struct{}) {
 	klog.InfoS("Starting controller", "controller", controllerName)
-	defer klog.Infof("Shutting down controller", "controller", controllerName)
+	defer klog.InfoS("Shutting down controller", "controller", controllerName)
 
 	if !cache.WaitForNamedCacheSync(controllerName, stopCh, c.labelListerSynced) {
-		klog.Error("failed to wait for label lister sync")
+		klog.Error("Failed to wait for label lister sync")
 		return
 	}
 	initialLabelCount := len(c.labelInformer.Informer().GetStore().List())
+	// Wait until initial label identities are processed before setting labelIdentityIndex as synced.
 	if err := wait.PollImmediateUntil(100*time.Millisecond, func() (done bool, err error) {
 		if uint64(initialLabelCount) > c.labelAddEvents.Load() {
 			return false, nil
@@ -106,14 +108,14 @@ func (c *Controller) Run(stopCh <-chan struct{}) {
 }
 
 func (c *Controller) addLabelIdentity(obj interface{}) {
-	labelIdentity := obj.(*multiclusterv1alpha1.LabelIdentity)
+	labelIdentity := obj.(*mcv1alpha1.LabelIdentity)
 	klog.InfoS("Processing LabelIdentity ADD event", "label", labelIdentity.Spec.Label, "id", labelIdentity.Spec.ID)
 	c.labelIdentityIndex.AddLabelIdentity(labelIdentity.Spec.Label, labelIdentity.Spec.ID)
 	c.labelAddEvents.Increment()
 }
 
 func (c *Controller) deleteLabelIdentity(obj interface{}) {
-	labelIdentity := obj.(*multiclusterv1alpha1.LabelIdentity)
+	labelIdentity := obj.(*mcv1alpha1.LabelIdentity)
 	klog.InfoS("Processing LabelIdentity DELETE event", "label", labelIdentity.Spec.Label)
 	c.labelIdentityIndex.DeleteLabelIdentity(labelIdentity.Spec.Label)
 }

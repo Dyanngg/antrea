@@ -241,19 +241,21 @@ func TestAddSelector(t *testing.T) {
 		"nomatch": sets.NewString(labelC),
 	}
 	for _, tt := range tests {
-		idsMatched := i.AddSelector(tt.selectorToAdd, tt.policyKey)
-		assert.ElementsMatch(t, tt.expMatchedIDs, idsMatched)
-		s, exists, _ := i.selectorItems.GetByKey(tt.selectorToAdd.NormalizedName)
-		if !exists {
-			t.Errorf("Failed to add selector %s to the LabelIdentityIndex", tt.name)
-		}
-		sItem := s.(*selectorItem)
-		if !tt.expLabelIdentityKeys.Equal(sItem.labelIdentityKeys) {
-			t.Errorf("Unexpected label identity keys for selectorItem %s. Exp: %v, Act: %v", tt.name, tt.expLabelIdentityKeys, sItem.labelIdentityKeys)
-		}
-		if !tt.expPolicyKeys.Equal(sItem.policyKeys) {
-			t.Errorf("Unexpected policy keys for selectorItem %s. Exp: %v, Act: %v", tt.name, tt.expPolicyKeys, sItem.policyKeys)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			idsMatched := i.AddSelector(tt.selectorToAdd, tt.policyKey)
+			assert.ElementsMatch(t, tt.expMatchedIDs, idsMatched)
+			s, exists, _ := i.selectorItems.GetByKey(tt.selectorToAdd.NormalizedName)
+			if !exists {
+				t.Errorf("Failed to add selector %s to the LabelIdentityIndex", tt.name)
+			}
+			sItem := s.(*selectorItem)
+			if !tt.expLabelIdentityKeys.Equal(sItem.labelIdentityKeys) {
+				t.Errorf("Unexpected label identity keys for selectorItem %s. Exp: %v, Act: %v", tt.name, tt.expLabelIdentityKeys, sItem.labelIdentityKeys)
+			}
+			if !tt.expPolicyKeys.Equal(sItem.policyKeys) {
+				t.Errorf("Unexpected policy keys for selectorItem %s. Exp: %v, Act: %v", tt.name, tt.expPolicyKeys, sItem.policyKeys)
+			}
+		})
 	}
 }
 
@@ -383,21 +385,23 @@ func TestSetPolicySelectors(t *testing.T) {
 		"nomatch": sets.NewString(labelC),
 	}
 	for _, tt := range tests {
-		matchedIDs := i.SetPolicySelectors(tt.selectors, tt.policyKey)
-		assert.ElementsMatch(t, tt.expIDs, matchedIDs)
-		assert.Equalf(t, len(tt.expSelectorItems), len(i.selectorItems.List()),
-			"Unexpected numner of cached selectorItems in step %s", tt.name)
-		for selKey, expSelItem := range tt.expSelectorItems {
-			s, exists, _ := i.selectorItems.GetByKey(selKey)
-			if !exists {
-				t.Errorf("Selector %s is not added in step %s", selKey, tt.name)
+		t.Run(tt.name, func(t *testing.T) {
+			matchedIDs := i.SetPolicySelectors(tt.selectors, tt.policyKey)
+			assert.ElementsMatch(t, tt.expIDs, matchedIDs)
+			assert.Equalf(t, len(tt.expSelectorItems), len(i.selectorItems.List()),
+				"Unexpected numner of cached selectorItems in step %s", tt.name)
+			for selKey, expSelItem := range tt.expSelectorItems {
+				s, exists, _ := i.selectorItems.GetByKey(selKey)
+				if !exists {
+					t.Errorf("Selector %s is not added in step %s", selKey, tt.name)
+				}
+				sItem := s.(*selectorItem)
+				assert.Truef(t, sItem.policyKeys.Equal(expSelItem.policyKeys),
+					"Unexpected policy keys for selectorItem %s in step %s", selKey, tt.name)
+				assert.Truef(t, sItem.labelIdentityKeys.Equal(expSelItem.labelIdentityKeys),
+					"Unexpected labelIdentity keys for selectorItem %s in step %s", selKey, tt.name)
 			}
-			sItem := s.(*selectorItem)
-			assert.Truef(t, sItem.policyKeys.Equal(expSelItem.policyKeys),
-				"Unexpected policy keys for selectorItem %s in step %s", selKey, tt.name)
-			assert.Truef(t, sItem.labelIdentityKeys.Equal(expSelItem.labelIdentityKeys),
-				"Unexpected labelIdentity keys for selectorItem %s in step %s", selKey, tt.name)
-		}
+		})
 	}
 }
 

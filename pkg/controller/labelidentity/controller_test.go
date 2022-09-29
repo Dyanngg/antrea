@@ -22,31 +22,29 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	featuregatetesting "k8s.io/component-base/featuregate/testing"
 
-	multiclusterv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
+	mcv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
 	fakeversioned "antrea.io/antrea/multicluster/pkg/client/clientset/versioned/fake"
 	crdinformers "antrea.io/antrea/multicluster/pkg/client/informers/externalversions"
-	"antrea.io/antrea/pkg/features"
 )
 
 const informerDefaultResync = 30 * time.Second
 
 var (
-	labelIdentityA = &multiclusterv1alpha1.LabelIdentity{
+	labelIdentityA = &mcv1alpha1.LabelIdentity{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "clusterA-3de4f2hdf1",
 		},
-		Spec: multiclusterv1alpha1.LabelIdentitySpec{
+		Spec: mcv1alpha1.LabelIdentitySpec{
 			Label: labelA,
 			ID:    1,
 		},
 	}
-	labelIdentityB = &multiclusterv1alpha1.LabelIdentity{
+	labelIdentityB = &mcv1alpha1.LabelIdentity{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "clusterA-23few454fg",
 		},
-		Spec: multiclusterv1alpha1.LabelIdentitySpec{
+		Spec: mcv1alpha1.LabelIdentitySpec{
 			Label: labelB,
 			ID:    2,
 		},
@@ -61,11 +59,9 @@ func TestGroupEntityControllerRun(t *testing.T) {
 		eventChanSize = originalEventChanSize
 	}()
 
-	defer featuregatetesting.SetFeatureGateDuringTest(t, features.DefaultFeatureGate, features.Multicluster, true)()
 	index := NewLabelIdentityIndex()
-
 	var objs []runtime.Object
-	initialLabelIdentities := []*multiclusterv1alpha1.LabelIdentity{labelIdentityA, labelIdentityB}
+	initialLabelIdentities := []*mcv1alpha1.LabelIdentity{labelIdentityA, labelIdentityB}
 	for _, l := range initialLabelIdentities {
 		objs = append(objs, l)
 	}

@@ -115,13 +115,12 @@ func run(o *Options) error {
 	// Create K8s Clientset, Aggregator Clientset, CRD Clientset and SharedInformerFactory for the given config.
 	// Aggregator Clientset is used to update the CABundle of the APIServices backed by antrea-controller so that
 	// the aggregator can verify its serving certificate.
-	client, aggregatorClient, crdClient, apiExtensionClient, mcsClient, err := k8s.CreateClients(o.config.ClientConnection, "")
+	client, aggregatorClient, crdClient, apiExtensionClient, mcClient, err := k8s.CreateClients(o.config.ClientConnection, "")
 	if err != nil {
 		return fmt.Errorf("error creating K8s clients: %v", err)
 	}
 	informerFactory := informers.NewSharedInformerFactory(client, informerDefaultResync)
 	crdInformerFactory := crdinformers.NewSharedInformerFactory(crdClient, informerDefaultResync)
-	mcInformerFactoty := mcsinformers.NewSharedInformerFactory(mcsClient, informerDefaultResync)
 	podInformer := informerFactory.Core().V1().Pods()
 	namespaceInformer := informerFactory.Core().V1().Namespaces()
 	serviceInformer := informerFactory.Core().V1().Services()
@@ -137,7 +136,6 @@ func run(o *Options) error {
 	egressInformer := crdInformerFactory.Crd().V1alpha2().Egresses()
 	externalIPPoolInformer := crdInformerFactory.Crd().V1alpha2().ExternalIPPools()
 	externalNodeInformer := crdInformerFactory.Crd().V1alpha1().ExternalNodes()
-	labelIdentityInformer := mcInformerFactoty.Multicluster().V1alpha1().LabelIdentities()
 
 	clusterIdentityAllocator := clusteridentity.NewClusterIdentityAllocator(
 		env.GetAntreaNamespace(),
@@ -154,8 +152,8 @@ func run(o *Options) error {
 	groupEntityIndex := grouping.NewGroupEntityIndex()
 	groupEntityController := grouping.NewGroupEntityController(groupEntityIndex, podInformer, namespaceInformer, eeInformer)
 	labelIdentityIndex := labelidentity.NewLabelIdentityIndex()
-	labelIdentityController := labelidentity.NewLabelIdentityController(labelIdentityIndex, labelIdentityInformer)
 
+	multiclusterEnabled := features.DefaultFeatureGate.Enabled(features.Multicluster) && o.config.Multicluster.Enable
 	networkPolicyController := networkpolicy.NewNetworkPolicyController(client,
 		crdClient,
 		groupEntityIndex,
@@ -172,7 +170,8 @@ func run(o *Options) error {
 		addressGroupStore,
 		appliedToGroupStore,
 		networkPolicyStore,
-		groupStore)
+		groupStore,
+		multiclusterEnabled)
 
 	var externalNodeController *externalnode.ExternalNodeController
 	if features.DefaultFeatureGate.Enabled(features.ExternalNode) {
@@ -295,7 +294,6 @@ func run(o *Options) error {
 
 	informerFactory.Start(stopCh)
 	crdInformerFactory.Start(stopCh)
-	mcInformerFactoty.Start(stopCh)
 
 	go clusterIdentityAllocator.Run(stopCh)
 
@@ -307,8 +305,14 @@ func run(o *Options) error {
 
 	go groupEntityController.Run(stopCh)
 
-	if features.DefaultFeatureGate.Enabled(features.Multicluster) {
+	if multiclusterEnabled {
+		mcInformerFactoty := mcsinformers.NewSharedInformerFactory(mcClient, informerDefaultResync)
+		labelIdentityInformer := mcInformerFactoty.Multicluster().V1alpha1().LabelIdentities()
+		labelIdentityController := labelidentity.NewLabelIdentityController(labelIdentityIndex, labelIdentityInformer)
+		mcInformerFactoty.Start(stopCh)
+
 		go labelIdentityIndex.Run(stopCh)
+
 		go labelIdentityController.Run(stopCh)
 	}
 

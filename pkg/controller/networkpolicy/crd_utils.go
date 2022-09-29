@@ -28,7 +28,6 @@ import (
 	"antrea.io/antrea/pkg/apis/crd/v1alpha1"
 	crdv1alpha3 "antrea.io/antrea/pkg/apis/crd/v1alpha3"
 	antreatypes "antrea.io/antrea/pkg/controller/types"
-	"antrea.io/antrea/pkg/features"
 	"antrea.io/antrea/pkg/util/k8s"
 )
 
@@ -152,9 +151,11 @@ func (n *NetworkPolicyController) toAntreaPeerForCRD(peers []v1alpha1.NetworkPol
 	var fqdns []string
 	var clusterSetScopeSelectors []*antreatypes.GroupSelector
 	for _, peer := range peers {
-		// A v1alpha1.NetworkPolicyPeer will either have an IPBlock or FQDNs or a
-		// podSelector and/or namespaceSelector set or a reference to the
-		// ClusterGroup.
+		// A v1alpha1.NetworkPolicyPeer will have exactly one of the following fields set:
+		// - podSelector and/or namespaceSelector (in-cluster scope or ClusterSet scope)
+		// - reference to a Group/ClusterGroup
+		// - IPBlocks
+		// - FQDNs
 		if peer.IPBlock != nil {
 			ipBlock, err := toAntreaIPBlockForCRD(peer.IPBlock)
 			if err != nil {
@@ -184,7 +185,7 @@ func (n *NetworkPolicyController) toAntreaPeerForCRD(peers []v1alpha1.NetworkPol
 		}
 	}
 	var labelIdentities []uint32
-	if features.DefaultFeatureGate.Enabled(features.Multicluster) {
+	if n.multiclusterEnabled {
 		labelIdentities = n.labelidentityInterface.SetPolicySelectors(clusterSetScopeSelectors, internalNetworkPolicyKeyFunc(np))
 	}
 	return &controlplane.NetworkPolicyPeer{AddressGroups: getAddressGroupNames(addressGroups), IPBlocks: ipBlocks, FQDNs: fqdns, LabelIdentities: labelIdentities}, addressGroups
