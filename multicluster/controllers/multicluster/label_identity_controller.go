@@ -87,7 +87,7 @@ func NewLabelIdentityReconciler(
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 func (r *LabelIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	klog.V(2).InfoS("Reconciling Pod for label identity", "pod", req.NamespacedName)
+	klog.InfoS("Reconciling Pod for label identity", "pod", req.NamespacedName)
 	if requeue := r.checkRemoteCommonArea(); requeue {
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -95,7 +95,7 @@ func (r *LabelIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	var ns v1.Namespace
 	if err := r.Client.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if apierrors.IsNotFound(err) {
-			klog.V(2).InfoS("Pod is deleted", "pod", req.NamespacedName)
+			klog.InfoS("Pod is deleted", "pod", req.NamespacedName)
 			r.onPodDelete(req.NamespacedName.String())
 			return ctrl.Result{}, nil
 		}
@@ -199,7 +199,7 @@ func (r *LabelIdentityReconciler) onPodCreateOrUpdate(podNamespacedName, current
 	podNames, ok := r.labelToPodsCache[currentLabel]
 	if !ok {
 		// Create a ResourceExport for this label as this is a new label.
-		klog.V(2).InfoS("New label in cluster, queuing for ResourceExport creation", "label", currentLabel)
+		klog.InfoS("New label in cluster, queuing for ResourceExport creation", "label", currentLabel)
 		r.labelToPodsCache[currentLabel] = sets.NewString(podNamespacedName)
 		r.labelQueue.Add(currentLabel)
 	} else {
@@ -276,7 +276,7 @@ func (r *LabelIdentityReconciler) syncLabelResourceExport(label string) error {
 func (r *LabelIdentityReconciler) createLabelIdentityResExport(ctx context.Context, labelToAdd string) error {
 	resExportName := getResourceExportNameForLabelIdentity(r.localClusterID, labelToAdd)
 	labelResExport := r.getLabelIdentityResourceExport(resExportName, labelToAdd)
-	klog.V(4).InfoS("Creating ResourceExport for label", "resourceExport", labelResExport.Name, "label", labelToAdd)
+	klog.InfoS("Creating ResourceExport for label", "resourceExport", labelResExport.Name, "label", labelToAdd)
 	err := r.remoteCommonArea.Create(ctx, labelResExport, &client.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return err
@@ -292,7 +292,7 @@ func (r *LabelIdentityReconciler) deleteLabelIdentityResExport(ctx context.Conte
 			Namespace: r.remoteCommonArea.GetNamespace(),
 		},
 	}
-	klog.V(4).InfoS("Deleting ResourceExport for label", "resourceExport", labelResExport.Name, "label", labelToDelete)
+	klog.InfoS("Deleting ResourceExport for label", "resourceExport", labelResExport.Name, "label", labelToDelete)
 	err := r.remoteCommonArea.Delete(ctx, labelResExport, &client.DeleteOptions{})
 	return client.IgnoreNotFound(err)
 }
