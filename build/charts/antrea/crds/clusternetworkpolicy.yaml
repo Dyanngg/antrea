@@ -334,6 +334,10 @@ spec:
                                   enum:
                                     - Self
                                   type: string
+                                sameLabels:
+                                  type: array
+                                  items:
+                                    type: string
                             ipBlock:
                               type: object
                               properties:
@@ -582,6 +586,10 @@ spec:
                                   enum:
                                     - Self
                                   type: string
+                                sameLabels:
+                                  type: array
+                                  items:
+                                    type: string
                             ipBlock:
                               type: object
                               properties:
