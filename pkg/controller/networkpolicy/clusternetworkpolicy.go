@@ -533,12 +533,14 @@ func (n *NetworkPolicyController) getNamespaceLabels(ns string) map[string]strin
 // groupNamespaceByLabelValue groups Namespaces if they have the same label value for all the
 // label keys listed. If a Namespace is missing at least one of the label keys, it will be
 // not be grouped. Example:
+//
 //	  ns1: app=web, tier=test, tenant=t1
 //	  ns2: app=web, tier=test, tenant=t2
 //	  ns3: app=web, tier=production, tenant=t1
 //	  ns4: app=web, tier=production, tenant=t2
 //	  ns5: app=db, tenant=t1
-//	labelKeys = [app, tier]
+//	  labelKeys = [app, tier]
+//
 //	Result after grouping:
 //	  "web,test,":       [ns1, ns2]
 //	  "web,production,": [ns3, ns4]

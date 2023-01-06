@@ -79,6 +79,12 @@ type CustomProbe struct {
 	ExpectConnectivity PodConnectivityMark
 }
 
+// TestNamespaceMeta holds the relevant metadata of a test Namespace during initialization.
+type TestNamespaceMeta struct {
+	Name   string
+	Labels map[string]string
+}
+
 // GetPodByLabel returns a Pod with the matching Namespace and "pod" label.
 func (k *KubernetesUtils) GetPodByLabel(ns string, name string) (*v1.Pod, error) {
 	pods, err := k.getPodsUncached(ns, "pod", name)
@@ -586,9 +592,9 @@ func (data *TestData) DeleteNetworkPolicy(ns, name string) error {
 }
 
 // CleanNetworkPolicies is a convenience function for deleting NetworkPolicies in the provided namespaces.
-func (data *TestData) CleanNetworkPolicies(namespaces map[string]string) error {
+func (data *TestData) CleanNetworkPolicies(namespaces map[string]TestNamespaceMeta) error {
 	for _, ns := range namespaces {
-		l, err := data.clientset.NetworkingV1().NetworkPolicies(ns).List(context.TODO(), metav1.ListOptions{})
+		l, err := data.clientset.NetworkingV1().NetworkPolicies(ns.Name).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			return errors.Wrapf(err, "unable to list NetworkPolicy in Namespace '%s'", ns)
 		}
@@ -749,7 +755,7 @@ func (k *KubernetesUtils) GetCG(name string) (*crdv1alpha2.ClusterGroup, error) 
 	return res, nil
 }
 
-// CreateGroup is a convenience function for creating an Antrea Group by namespace,  name and selector.
+// CreateGroup is a convenience function for creating an Antrea Group by namespace, name and selector.
 func (k *KubernetesUtils) CreateGroup(namespace, name string, pSelector, nSelector *metav1.LabelSelector, ipBlocks []crdv1alpha1.IPBlock) (*crdv1alpha3.Group, error) {
 	log.Infof("Creating group %s/%s", namespace, name)
 	_, err := k.crdClient.CrdV1alpha3().Groups(namespace).Get(context.TODO(), name, metav1.GetOptions{})
@@ -1077,16 +1083,21 @@ func (k *KubernetesUtils) Validate(allPods []Pod, reachability *Reachability, po
 	}
 }
 
-func (k *KubernetesUtils) Bootstrap(namespaces map[string]string, pods []string) (*map[string][]string, error) {
+func (k *KubernetesUtils) Bootstrap(namespaces map[string]TestNamespaceMeta, pods []string) (*map[string][]string, error) {
 	for _, ns := range namespaces {
-		_, err := k.CreateOrUpdateNamespace(ns, map[string]string{"ns": ns})
+		if ns.Labels == nil {
+			ns.Labels = make(map[string]string)
+		}
+		// convenience label for testing
+		ns.Labels["ns"] = ns.Name
+		_, err := k.CreateOrUpdateNamespace(ns.Name, ns.Labels)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "unable to create/update ns %s", ns)
 		}
 		for _, pod := range pods {
 			log.Infof("Creating/updating Pod '%s/%s'", ns, pod)
-			deployment := ns + pod
-			_, err := k.CreateOrUpdateDeployment(ns, deployment, 1, map[string]string{"pod": pod, "app": pod})
+			deployment := ns.Name + pod
+			_, err := k.CreateOrUpdateDeployment(ns.Name, deployment, 1, map[string]string{"pod": pod, "app": pod})
 			if err != nil {
 				return nil, errors.WithMessagef(err, "unable to create/update Deployment '%s/%s'", ns, pod)
 			}
@@ -1096,7 +1107,7 @@ func (k *KubernetesUtils) Bootstrap(namespaces map[string]string, pods []string)
 	podIPs := make(map[string][]string, len(pods)*len(namespaces))
 	for _, podName := range pods {
 		for _, ns := range namespaces {
-			allPods = append(allPods, NewPod(ns, podName))
+			allPods = append(allPods, NewPod(ns.Name, podName))
 		}
 	}
 	for _, pod := range allPods {
@@ -1116,7 +1127,7 @@ func (k *KubernetesUtils) Bootstrap(namespaces map[string]string, pods []string)
 	return &podIPs, nil
 }
 
-func (k *KubernetesUtils) Cleanup(namespaces map[string]string) {
+func (k *KubernetesUtils) Cleanup(namespaces map[string]TestNamespaceMeta) {
 	// Cleanup any cluster-scoped resources.
 	if err := k.CleanACNPs(); err != nil {
 		log.Errorf("Error when cleaning up ACNPs: %v", err)
@@ -1127,7 +1138,7 @@ func (k *KubernetesUtils) Cleanup(namespaces map[string]string) {
 
 	for _, ns := range namespaces {
 		log.Infof("Deleting test Namespace %s", ns)
-		if err := k.DeleteNamespace(ns, defaultTimeout); err != nil {
+		if err := k.DeleteNamespace(ns.Name, defaultTimeout); err != nil {
 			log.Errorf("Error when deleting Namespace '%s': %v", ns, err)
 		}
 	}
