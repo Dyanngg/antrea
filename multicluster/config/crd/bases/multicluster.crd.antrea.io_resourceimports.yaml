@@ -628,9 +628,17 @@ spec:
                                   ingress/egress rules. Cannot be set with NamespaceSelector.'
                                 properties:
                                   match:
-                                    description: NamespaceMatchType describes Namespace
-                                      matching strategy.
+                                    description: Selects from the same Namespace of
+                                      the appliedTo workloads.
                                     type: string
+                                  sameLabels:
+                                    description: Selects Namespaces that share the
+                                      same values for the given set of label keys
+                                      with the appliedTo Namespace. Namespaces must
+                                      have all the label keys.
+                                    items:
+                                      type: string
+                                    type: array
                                 type: object
                               nodeSelector:
                                 description: Select certain Nodes which match the
@@ -1008,9 +1016,17 @@ spec:
                                   ingress/egress rules. Cannot be set with NamespaceSelector.'
                                 properties:
                                   match:
-                                    description: NamespaceMatchType describes Namespace
-                                      matching strategy.
+                                    description: Selects from the same Namespace of
+                                      the appliedTo workloads.
                                     type: string
+                                  sameLabels:
+                                    description: Selects Namespaces that share the
+                                      same values for the given set of label keys
+                                      with the appliedTo Namespace. Namespaces must
+                                      have all the label keys.
+                                    items:
+                                      type: string
+                                    type: array
                                 type: object
                               nodeSelector:
                                 description: Select certain Nodes which match the
@@ -1516,9 +1532,17 @@ spec:
                                   ingress/egress rules. Cannot be set with NamespaceSelector.'
                                 properties:
                                   match:
-                                    description: NamespaceMatchType describes Namespace
-                                      matching strategy.
+                                    description: Selects from the same Namespace of
+                                      the appliedTo workloads.
                                     type: string
+                                  sameLabels:
+                                    description: Selects Namespaces that share the
+                                      same values for the given set of label keys
+                                      with the appliedTo Namespace. Namespaces must
+                                      have all the label keys.
+                                    items:
+                                      type: string
+                                    type: array
                                 type: object
                               nodeSelector:
                                 description: Select certain Nodes which match the
@@ -1896,9 +1920,17 @@ spec:
                                   ingress/egress rules. Cannot be set with NamespaceSelector.'
                                 properties:
                                   match:
-                                    description: NamespaceMatchType describes Namespace
-                                      matching strategy.
+                                    description: Selects from the same Namespace of
+                                      the appliedTo workloads.
                                     type: string
+                                  sameLabels:
+                                    description: Selects Namespaces that share the
+                                      same values for the given set of label keys
+                                      with the appliedTo Namespace. Namespaces must
+                                      have all the label keys.
+                                    items:
+                                      type: string
+                                    type: array
                                 type: object
                               nodeSelector:
                                 description: Select certain Nodes which match the
