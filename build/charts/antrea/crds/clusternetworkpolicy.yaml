@@ -352,6 +352,16 @@ spec:
                               required:
                               - name
                               - namespace
+                            endpointSelector:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                namespace:
+                                  type: string
+                              required:
+                                - name
+                                - namespace
                             nodeSelector:
                               type: object
                               properties:

@@ -494,6 +494,9 @@ type NetworkPolicyPeer struct {
 	// A NodeSelector cannot be set in AppliedTo field or set with any other selector.
 	// +optional
 	NodeSelector *metav1.LabelSelector `json:"nodeSelector,omitempty"`
+	// Select all unique IP addresses in the Endpoint object specified.
+	// This field can only be set for NetworkPolicyPeer of ingress rules.
+	EndpointSelector *NamespacedName `json:"endpointSelector,omitempty"`
 	// Define scope of the Pod/NamespaceSelector(s) of this peer.
 	// Can only be used in ingress NetworkPolicyPeers.
 	// Defaults to "Cluster".

@@ -208,6 +208,14 @@ type NetworkPolicyController struct {
 	// once.
 	grpListerSynced cache.InformerSynced
 
+	epInformer coreinformers.EndpointsInformer
+	// nodeLister is able to list/get Endpoints and is populated by the shared informer passed to
+	// NewNetworkPolicyController.
+	epLister corelisters.EndpointsLister
+	// epListerSynced is a function which returns true if the Endpoint shared informer has been synced at least
+	// once.
+	epListerSynced cache.InformerSynced
+
 	// addressGroupStore is the storage where the populated Address Groups are stored.
 	addressGroupStore storage.Interface
 	// appliedToGroupStore is the storage where the populated AppliedTo Groups are stored.

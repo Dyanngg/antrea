@@ -15,6 +15,8 @@
 package networkpolicy
 
 import (
+	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,10 +132,35 @@ func toAntreaIPBlockForCRD(ipBlock *v1alpha1.IPBlock) (*controlplane.IPBlock, er
 	}
 	antreaIPBlock := &controlplane.IPBlock{
 		CIDR: *ipNet,
-		// secv1alpha.IPBlock does not have the Except slices.
+		// controlplane.IPBlock does not have the Except slices.
 		Except: []controlplane.IPNet{},
 	}
 	return antreaIPBlock, nil
+}
+
+func (n *NetworkPolicyController) toAntreaIPBlocksForEndpointSelector(ep *v1alpha1.NamespacedName) []controlplane.IPBlock {
+	var epIpNets []controlplane.IPBlock
+	epObj, err := n.epLister.Endpoints(ep.Namespace).Get(ep.Name)
+	if err != nil {
+		return epIpNets
+	}
+	for _, ss := range epObj.Subsets {
+		for _, addr := range ss.Addresses {
+			ip := net.ParseIP(addr.IP)
+			if ip.To4() != nil {
+				prefixLen, _ := strconv.ParseInt("32", 10, 32)
+				epIpNets = append(epIpNets, controlplane.IPBlock{
+					CIDR: controlplane.IPNet{
+						IP:           controlplane.IPAddress(ip),
+						PrefixLength: int32(prefixLen),
+					},
+				})
+			} else {
+
+			}
+		}
+	}
+	return epIpNets
 }
 
 // toAntreaPeerForCRD creates a Antrea controlplane NetworkPolicyPeer for crdv1alpha1 NetworkPolicyPeer.
