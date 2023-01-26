@@ -89,11 +89,11 @@ func (n *NetworkPolicyController) deleteCNP(old interface{}) {
 // filterPerNamespaceRuleACNPsByNSLabels gets all ClusterNetworkPolicy names that will need to be
 // re-processed based on the entire label set of an added/updated/deleted Namespace.
 func (n *NetworkPolicyController) filterPerNamespaceRuleACNPsByNSLabels(nsLabels labels.Set) sets.String {
-	namespaceLabelMatches := func(peers []crdv1alpha1.AppliedTo) bool {
-		for _, peer := range peers {
-			nsLabelSelector := peer.NamespaceSelector
-			if peer.Group != "" {
-				cg, err := n.cgLister.Get(peer.Group)
+	namespaceLabelMatches := func(appliedTos []crdv1alpha1.AppliedTo) bool {
+		for _, at := range appliedTos {
+			nsLabelSelector := at.NamespaceSelector
+			if at.Group != "" {
+				cg, err := n.cgLister.Get(at.Group)
 				// It's fine to ignore this peer if the ClusterGroup is not found. After the ClusterGroup is created,
 				// the ClusterNetworkPolicy will be reprocessed anyway.
 				if err != nil {
@@ -114,7 +114,6 @@ func (n *NetworkPolicyController) filterPerNamespaceRuleACNPsByNSLabels(nsLabels
 		}
 		return false
 	}
-
 	peerNamespacesSelectorExists := func(peers []crdv1alpha1.NetworkPolicyPeer) bool {
 		for _, peer := range peers {
 			if peer.Namespaces != nil {
@@ -123,9 +122,8 @@ func (n *NetworkPolicyController) filterPerNamespaceRuleACNPsByNSLabels(nsLabels
 		}
 		return false
 	}
-
 	affectedPolicies := sets.NewString()
-	objs, _ := n.cnpInformer.Informer().GetIndexer().ByIndex(perNamespaceRuleIndex, HasPerNamespaceRule)
+	objs, _ := n.cnpInformer.Informer().GetIndexer().ByIndex(perNamespaceRuleIndex, hasSuchRule)
 	for _, obj := range objs {
 		cnp := obj.(*crdv1alpha1.ClusterNetworkPolicy)
 		if affected := func() bool {
@@ -157,6 +155,17 @@ func (n *NetworkPolicyController) filterPerNamespaceRuleACNPsByNSLabels(nsLabels
 	return affectedPolicies
 }
 
+// getNSLabelRuleACNPs gets all ACNPs that have rules based on Namespace label values.
+func (n *NetworkPolicyController) getNSLabelRuleACNPs() sets.String {
+	nsLabelRulePolicy := sets.NewString()
+	objs, _ := n.cnpInformer.Informer().GetIndexer().ByIndex(namespaceLabelRuleIndex, hasSuchRule)
+	for _, obj := range objs {
+		cnp := obj.(*crdv1alpha1.ClusterNetworkPolicy)
+		nsLabelRulePolicy.Insert(cnp.Name)
+	}
+	return nsLabelRulePolicy
+}
+
 // addNamespace receives Namespace ADD events and triggers all ClusterNetworkPolicies that have a
 // per-namespace rule applied to this Namespace to be re-processed.
 func (n *NetworkPolicyController) addNamespace(obj interface{}) {
@@ -185,6 +194,9 @@ func (n *NetworkPolicyController) updateNamespace(oldObj, curObj interface{}) {
 		affectedACNPsByOldLabels := n.filterPerNamespaceRuleACNPsByNSLabels(oldNamespace.Labels)
 		affectedACNPsByCurLabels := n.filterPerNamespaceRuleACNPsByNSLabels(curNamespace.Labels)
 		affectedACNPs := utilsets.SymmetricDifferenceString(affectedACNPsByOldLabels, affectedACNPsByCurLabels)
+		// ACNPs that have rules created based on Namespace label values need to be reprocessed
+		// regardless of Namespace label before and after the update.
+		affectedACNPs = affectedACNPs.Union(n.getNSLabelRuleACNPs())
 		for cnpName := range affectedACNPs {
 			// Ignore the ClusterNetworkPolicy if it has been removed during the process.
 			if cnp, err := n.cnpLister.Get(cnpName); err == nil {
@@ -331,8 +343,8 @@ func (c *NetworkPolicyController) updateNode(oldObj, newObj interface{}) {
 // of an UPDATE event.
 func (n *NetworkPolicyController) processClusterNetworkPolicy(cnp *crdv1alpha1.ClusterNetworkPolicy) (*antreatypes.NetworkPolicy, map[string]*antreatypes.AppliedToGroup, map[string]*antreatypes.AddressGroup) {
 	hasPerNamespaceRule := hasPerNamespaceRule(cnp)
-	// If one of the ACNP rule is a per-namespace rule (a peer in that rule has namespaces.Match set
-	// to Self), the policy will need to be converted to appliedTo per rule policy, as the appliedTo
+	// If one of the ACNP rule is a per-namespace rule (a peer in that rule has namespaces field
+	// set), the policy will need to be converted to appliedTo per rule policy, as the appliedTo
 	// will be different for rules created for each namespace.
 	appliedToPerRule := len(cnp.Spec.AppliedTo) == 0 || hasPerNamespaceRule
 	// appliedToGroups tracks all distinct appliedToGroups referred to by the ClusterNetworkPolicy,
@@ -518,6 +530,24 @@ func hasPerNamespaceRule(cnp *crdv1alpha1.ClusterNetworkPolicy) bool {
 	for _, egress := range cnp.Spec.Egress {
 		for _, peer := range egress.To {
 			if peer.Namespaces != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasNamespaceLabelRule(cnp *crdv1alpha1.ClusterNetworkPolicy) bool {
+	for _, ingress := range cnp.Spec.Ingress {
+		for _, peer := range ingress.From {
+			if peer.Namespaces != nil && len(peer.Namespaces.SameLabels) > 0 {
+				return true
+			}
+		}
+	}
+	for _, egress := range cnp.Spec.Egress {
+		for _, peer := range egress.To {
+			if peer.Namespaces != nil && len(peer.Namespaces.SameLabels) > 0 {
 				return true
 			}
 		}
