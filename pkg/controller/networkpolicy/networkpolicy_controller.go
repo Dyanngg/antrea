@@ -94,7 +94,7 @@ const (
 	internalGroupType  grouping.GroupType = "internalGroup"
 
 	perNamespaceRuleIndex   = "hasPerNamespaceRule"
-	namespaceLabelRuleIndex = "hasNamespaceLabelRule"
+	namespaceLabelRuleIndex = "namespaceRuleLabelKeys"
 	hasSuchRule             = "true"
 )
 
@@ -326,10 +326,7 @@ var cnpIndexers = cache.Indexers{
 		if !ok {
 			return []string{}, nil
 		}
-		if hasNSLabelRule := hasNamespaceLabelRule(cnp); hasNSLabelRule {
-			return []string{hasSuchRule}, nil
-		}
-		return []string{}, nil
+		return namespaceRuleLabelKeys(cnp).List(), nil
 	},
 }
 

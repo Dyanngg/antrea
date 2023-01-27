@@ -155,15 +155,17 @@ func (n *NetworkPolicyController) filterPerNamespaceRuleACNPsByNSLabels(nsLabels
 	return affectedPolicies
 }
 
-// getNSLabelRuleACNPs gets all ACNPs that have rules based on Namespace label values.
-func (n *NetworkPolicyController) getNSLabelRuleACNPs() sets.String {
-	nsLabelRulePolicy := sets.NewString()
-	objs, _ := n.cnpInformer.Informer().GetIndexer().ByIndex(namespaceLabelRuleIndex, hasSuchRule)
-	for _, obj := range objs {
-		cnp := obj.(*crdv1alpha1.ClusterNetworkPolicy)
-		nsLabelRulePolicy.Insert(cnp.Name)
+// getNSLabelRuleACNPs gets all ACNPs that have relevant rules based on Namespace label keys.
+func (n *NetworkPolicyController) getNSLabelRuleACNPs(nsLabels labels.Set) sets.String {
+	matchedNSLabelRulePolicy := sets.NewString()
+	for k := range nsLabels {
+		objs, _ := n.cnpInformer.Informer().GetIndexer().ByIndex(namespaceLabelRuleIndex, k)
+		for _, obj := range objs {
+			cnp := obj.(*crdv1alpha1.ClusterNetworkPolicy)
+			matchedNSLabelRulePolicy.Insert(cnp.Name)
+		}
 	}
-	return nsLabelRulePolicy
+	return matchedNSLabelRulePolicy
 }
 
 // addNamespace receives Namespace ADD events and triggers all ClusterNetworkPolicies that have a
@@ -173,6 +175,9 @@ func (n *NetworkPolicyController) addNamespace(obj interface{}) {
 	namespace := obj.(*v1.Namespace)
 	klog.V(2).Infof("Processing Namespace %s ADD event, labels: %v", namespace.Name, namespace.Labels)
 	affectedACNPs := n.filterPerNamespaceRuleACNPsByNSLabels(namespace.Labels)
+	// Any ACNPs that has Namespace label rules that refers to the Namespace's label
+	// key set need to be re-processed.
+	affectedACNPs = affectedACNPs.Union(n.getNSLabelRuleACNPs(namespace.Labels))
 	for cnpName := range affectedACNPs {
 		// Ignore the ClusterNetworkPolicy if it has been removed during the process.
 		if cnp, err := n.cnpLister.Get(cnpName); err == nil {
@@ -194,9 +199,10 @@ func (n *NetworkPolicyController) updateNamespace(oldObj, curObj interface{}) {
 		affectedACNPsByOldLabels := n.filterPerNamespaceRuleACNPsByNSLabels(oldNamespace.Labels)
 		affectedACNPsByCurLabels := n.filterPerNamespaceRuleACNPsByNSLabels(curNamespace.Labels)
 		affectedACNPs := utilsets.SymmetricDifferenceString(affectedACNPsByOldLabels, affectedACNPsByCurLabels)
-		// ACNPs that have rules created based on Namespace label values need to be reprocessed
-		// regardless of Namespace label before and after the update.
-		affectedACNPs = affectedACNPs.Union(n.getNSLabelRuleACNPs())
+		// Any ACNPs that has Namespace label rules that refers to the original or
+		// current Namespaces' label key set need to be re-processed.
+		acnpsWithRulesMatchingNSLabelKeys := n.getNSLabelRuleACNPs(oldNamespace.Labels).Union(n.getNSLabelRuleACNPs(curNamespace.Labels))
+		affectedACNPs = affectedACNPs.Union(acnpsWithRulesMatchingNSLabelKeys)
 		for cnpName := range affectedACNPs {
 			// Ignore the ClusterNetworkPolicy if it has been removed during the process.
 			if cnp, err := n.cnpLister.Get(cnpName); err == nil {
@@ -232,6 +238,7 @@ func (n *NetworkPolicyController) deleteNamespace(old interface{}) {
 	defer n.heartbeat("deleteNamespace")
 	klog.V(2).Infof("Processing Namespace %s DELETE event, labels: %v", namespace.Name, namespace.Labels)
 	affectedACNPs := n.filterPerNamespaceRuleACNPsByNSLabels(namespace.Labels)
+	affectedACNPs = affectedACNPs.Union(n.getNSLabelRuleACNPs(namespace.Labels))
 	for _, cnpName := range affectedACNPs.List() {
 		// Ignore the ClusterNetworkPolicy if it has been removed during the process.
 		if cnp, err := n.cnpLister.Get(cnpName); err == nil {
@@ -537,22 +544,27 @@ func hasPerNamespaceRule(cnp *crdv1alpha1.ClusterNetworkPolicy) bool {
 	return false
 }
 
-func hasNamespaceLabelRule(cnp *crdv1alpha1.ClusterNetworkPolicy) bool {
+func namespaceRuleLabelKeys(cnp *crdv1alpha1.ClusterNetworkPolicy) sets.String {
+	keys := sets.NewString()
 	for _, ingress := range cnp.Spec.Ingress {
 		for _, peer := range ingress.From {
 			if peer.Namespaces != nil && len(peer.Namespaces.SameLabels) > 0 {
-				return true
+				for _, k := range peer.Namespaces.SameLabels {
+					keys.Insert(k)
+				}
 			}
 		}
 	}
 	for _, egress := range cnp.Spec.Egress {
 		for _, peer := range egress.To {
 			if peer.Namespaces != nil && len(peer.Namespaces.SameLabels) > 0 {
-				return true
+				for _, k := range peer.Namespaces.SameLabels {
+					keys.Insert(k)
+				}
 			}
 		}
 	}
-	return false
+	return keys
 }
 
 func (n *NetworkPolicyController) getNamespaceLabels(ns string) map[string]string {
