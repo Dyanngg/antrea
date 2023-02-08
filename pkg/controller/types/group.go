@@ -53,11 +53,14 @@ type GroupSelector struct {
 	// This is a label selector which selects certain Node IPs. Within a group NodeSelector cannot be set together with
 	// other selectors: Namespace/NamespaceSelector/PodSelector/ExternalEntitySelector.
 	NodeSelector labels.Selector
+	// NamespaceInverted signifies whether the Namespaces selected by the selector
+	// should be inverted (i.e. match all Namespaces that are not these Namespaces).
+	NamespaceInverted bool
 }
 
 // NewGroupSelector converts the podSelector, namespaceSelector, externalEntitySelector and nodeSelector
 // and NetworkPolicy Namespace to a networkpolicy.GroupSelector object.
-func NewGroupSelector(namespace string, podSelector, nsSelector, extEntitySelector, nodeSelector *metav1.LabelSelector) *GroupSelector {
+func NewGroupSelector(namespace string, podSelector, nsSelector, extEntitySelector, nodeSelector *metav1.LabelSelector, nsInverted bool) *GroupSelector {
 	groupSelector := GroupSelector{}
 	if podSelector != nil {
 		groupSelector.PodSelector, _ = metav1.LabelSelectorAsSelector(podSelector)
@@ -72,13 +75,13 @@ func NewGroupSelector(namespace string, podSelector, nsSelector, extEntitySelect
 	} else {
 		groupSelector.NamespaceSelector, _ = metav1.LabelSelectorAsSelector(nsSelector)
 	}
-
 	if nodeSelector != nil {
 		groupSelector.NodeSelector, _ = metav1.LabelSelectorAsSelector(nodeSelector)
 	}
-
+	groupSelector.NamespaceInverted = nsInverted
 	name := GenerateNormalizedName(groupSelector.Namespace, groupSelector.PodSelector,
-		groupSelector.NamespaceSelector, groupSelector.ExternalEntitySelector, groupSelector.NodeSelector)
+		groupSelector.NamespaceSelector, groupSelector.ExternalEntitySelector, groupSelector.NodeSelector,
+		groupSelector.NamespaceInverted)
 	groupSelector.NormalizedName = name
 	return &groupSelector
 }
@@ -87,12 +90,15 @@ func NewGroupSelector(namespace string, podSelector, nsSelector, extEntitySelect
 // the following format: "namespace=NamespaceName And podSelector=normalizedPodSelector".
 // Note: Namespace and nsSelector may or may not be set depending on the
 // selector. However, they cannot be set simultaneously.
-func GenerateNormalizedName(namespace string, podSelector, nsSelector, eeSelector labels.Selector, nodeSelector labels.Selector) string {
+func GenerateNormalizedName(namespace string, podSelector, nsSelector, eeSelector labels.Selector, nodeSelector labels.Selector, nsInverted bool) string {
 	normalizedName := []string{}
 	if nsSelector != nil {
 		normalizedName = append(normalizedName, fmt.Sprintf("namespaceSelector=%s", nsSelector.String()))
 	} else if namespace != "" {
 		normalizedName = append(normalizedName, fmt.Sprintf("namespace=%s", namespace))
+	}
+	if nsInverted {
+		normalizedName = append(normalizedName, "NamespaceInverted")
 	}
 	if podSelector != nil {
 		normalizedName = append(normalizedName, fmt.Sprintf("podSelector=%s", podSelector.String()))

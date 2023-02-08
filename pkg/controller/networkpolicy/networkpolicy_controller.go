@@ -556,7 +556,7 @@ func getNormalizedUID(name string) string {
 
 // createAppliedToGroup creates an AppliedToGroup object corresponding to the provided selectors.
 func (n *NetworkPolicyController) createAppliedToGroup(npNsName string, pSel, nSel, eSel *metav1.LabelSelector) *antreatypes.AppliedToGroup {
-	groupSelector := antreatypes.NewGroupSelector(npNsName, pSel, nSel, eSel, nil)
+	groupSelector := antreatypes.NewGroupSelector(npNsName, pSel, nSel, eSel, nil, false)
 	appliedToGroupUID := getNormalizedUID(groupSelector.NormalizedName)
 	// Construct a new AppliedToGroup.
 	appliedToGroup := &antreatypes.AppliedToGroup{
@@ -571,8 +571,8 @@ func (n *NetworkPolicyController) createAppliedToGroup(npNsName string, pSel, nS
 // NetworkPolicyPeer object in NetworkPolicyRule. This function simply
 // creates the object without actually populating the PodAddresses as the
 // affected GroupMembers are calculated during sync process.
-func (n *NetworkPolicyController) createAddressGroup(namespace string, podSelector, nsSelector, eeSelector, nodeSelector *metav1.LabelSelector) *antreatypes.AddressGroup {
-	groupSelector := antreatypes.NewGroupSelector(namespace, podSelector, nsSelector, eeSelector, nodeSelector)
+func (n *NetworkPolicyController) createAddressGroup(namespace string, podSelector, nsSelector, eeSelector, nodeSelector *metav1.LabelSelector, nsInverted bool) *antreatypes.AddressGroup {
+	groupSelector := antreatypes.NewGroupSelector(namespace, podSelector, nsSelector, eeSelector, nodeSelector, nsInverted)
 	normalizedUID := getNormalizedUID(groupSelector.NormalizedName)
 	// Create an AddressGroup object per Peer object.
 	addressGroup := &antreatypes.AddressGroup{
@@ -739,7 +739,7 @@ func (n *NetworkPolicyController) toAntreaPeer(peers []networkingv1.NetworkPolic
 		if dir == controlplane.DirectionIn || !namedPortExists {
 			return &matchAllPeer, nil
 		}
-		allPodsGroup := n.createAddressGroup(np.Namespace, matchAllPodsPeer.PodSelector, matchAllPodsPeer.NamespaceSelector, nil, nil)
+		allPodsGroup := n.createAddressGroup(np.Namespace, matchAllPodsPeer.PodSelector, matchAllPodsPeer.NamespaceSelector, nil, nil, false)
 		addressGroups = append(addressGroups, allPodsGroup)
 		podsPeer := matchAllPeer
 		podsPeer.AddressGroups = append(podsPeer.AddressGroups, allPodsGroup.Name)
@@ -757,7 +757,7 @@ func (n *NetworkPolicyController) toAntreaPeer(peers []networkingv1.NetworkPolic
 			}
 			ipBlocks = append(ipBlocks, *ipBlock)
 		} else {
-			addressGroup := n.createAddressGroup(np.Namespace, peer.PodSelector, peer.NamespaceSelector, nil, nil)
+			addressGroup := n.createAddressGroup(np.Namespace, peer.PodSelector, peer.NamespaceSelector, nil, nil, false)
 			addressGroups = append(addressGroups, addressGroup)
 		}
 	}

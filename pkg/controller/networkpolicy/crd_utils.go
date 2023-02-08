@@ -154,7 +154,7 @@ func (n *NetworkPolicyController) toAntreaPeerForCRD(peers []v1alpha1.NetworkPol
 		if dir == controlplane.DirectionIn || !namedPortExists {
 			return &matchAllPeer, nil
 		}
-		allPodsGroup := n.createAddressGroup("", matchAllPodsPeerCrd.PodSelector, matchAllPodsPeerCrd.NamespaceSelector, nil, nil)
+		allPodsGroup := n.createAddressGroup("", matchAllPodsPeerCrd.PodSelector, matchAllPodsPeerCrd.NamespaceSelector, nil, nil, false)
 		addressGroups = append(addressGroups, allPodsGroup)
 		podsPeer := matchAllPeer
 		podsPeer.AddressGroups = append(podsPeer.AddressGroups, allPodsGroup.Name)
@@ -185,17 +185,17 @@ func (n *NetworkPolicyController) toAntreaPeerForCRD(peers []v1alpha1.NetworkPol
 		} else if peer.FQDN != "" {
 			fqdns = append(fqdns, peer.FQDN)
 		} else if peer.ServiceAccount != nil {
-			addressGroup := n.createAddressGroup(peer.ServiceAccount.Namespace, serviceAccountNameToPodSelector(peer.ServiceAccount.Name), nil, nil, nil)
+			addressGroup := n.createAddressGroup(peer.ServiceAccount.Namespace, serviceAccountNameToPodSelector(peer.ServiceAccount.Name), nil, nil, nil, false)
 			addressGroups = append(addressGroups, addressGroup)
 		} else if peer.NodeSelector != nil {
-			addressGroup := n.createAddressGroup("", nil, nil, nil, peer.NodeSelector)
+			addressGroup := n.createAddressGroup("", nil, nil, nil, peer.NodeSelector, false)
 			addressGroups = append(addressGroups, addressGroup)
 		} else {
-			addressGroup := n.createAddressGroup(np.GetNamespace(), peer.PodSelector, peer.NamespaceSelector, peer.ExternalEntitySelector, nil)
+			addressGroup := n.createAddressGroup(np.GetNamespace(), peer.PodSelector, peer.NamespaceSelector, peer.ExternalEntitySelector, nil, false)
 			addressGroups = append(addressGroups, addressGroup)
 		}
 		if peer.Scope == v1alpha1.ScopeClusterSet {
-			clusterSetScopeSelectors = append(clusterSetScopeSelectors, antreatypes.NewGroupSelector(np.GetNamespace(), peer.PodSelector, peer.NamespaceSelector, nil, nil))
+			clusterSetScopeSelectors = append(clusterSetScopeSelectors, antreatypes.NewGroupSelector(np.GetNamespace(), peer.PodSelector, peer.NamespaceSelector, nil, nil, false))
 		}
 	}
 	var labelIdentities []uint32
@@ -205,13 +205,17 @@ func (n *NetworkPolicyController) toAntreaPeerForCRD(peers []v1alpha1.NetworkPol
 	return &controlplane.NetworkPolicyPeer{AddressGroups: getAddressGroupNames(addressGroups), IPBlocks: ipBlocks, FQDNs: fqdns, LabelIdentities: labelIdentities}, addressGroups
 }
 
+func peerSelectsInvertedNamespaces(peer *v1alpha1.NetworkPolicyPeer) bool {
+	return peer.Namespaces.Match == v1alpha1.NamespaceMatchNotSelf
+}
+
 // toNamespacedPeerForCRD creates an Antrea controlplane NetworkPolicyPeer for crdv1alpha1 NetworkPolicyPeer
 // for a particular Namespace. It is used when a single crdv1alpha1 NetworkPolicyPeer maps to multiple
 // controlplane NetworkPolicyPeers because the appliedTo workloads reside in different Namespaces.
 func (n *NetworkPolicyController) toNamespacedPeerForCRD(peers []v1alpha1.NetworkPolicyPeer, namespace string) (*controlplane.NetworkPolicyPeer, []*antreatypes.AddressGroup) {
 	var addressGroups []*antreatypes.AddressGroup
 	for _, peer := range peers {
-		addressGroup := n.createAddressGroup(namespace, peer.PodSelector, nil, peer.ExternalEntitySelector, nil)
+		addressGroup := n.createAddressGroup(namespace, peer.PodSelector, nil, peer.ExternalEntitySelector, nil, peerSelectsInvertedNamespaces(&peer))
 		addressGroups = append(addressGroups, addressGroup)
 	}
 	return &controlplane.NetworkPolicyPeer{AddressGroups: getAddressGroupNames(addressGroups)}, addressGroups

@@ -550,7 +550,8 @@ type PeerNamespaces struct {
 type NamespaceMatchType string
 
 const (
-	NamespaceMatchSelf NamespaceMatchType = "Self"
+	NamespaceMatchSelf    NamespaceMatchType = "Self"
+	NamespaceMatchNotSelf NamespaceMatchType = "NotSelf"
 )
 
 type PeerScope string

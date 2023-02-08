@@ -725,9 +725,9 @@ func TestAddPod(t *testing.T) {
 			npc.addClusterGroup(testCG)
 			npc.cgStore.Add(testCG)
 			npc.groupingInterface.AddPod(tt.addedPod)
-			appGroupID := getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorSpec, nil, nil, nil).NormalizedName)
-			inGroupID := getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorIn, nil, nil, nil).NormalizedName)
-			outGroupID := getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorOut, nil, nil, nil).NormalizedName)
+			appGroupID := getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorSpec, nil, nil, nil, false).NormalizedName)
+			inGroupID := getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorIn, nil, nil, nil, false).NormalizedName)
+			outGroupID := getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorOut, nil, nil, nil, false).NormalizedName)
 			npc.syncAppliedToGroup(appGroupID)
 			npc.syncAddressGroup(inGroupID)
 			npc.syncAddressGroup(outGroupID)
@@ -769,7 +769,7 @@ func TestDeletePod(t *testing.T) {
 	inPSelector := metav1.LabelSelector{
 		MatchLabels: ruleLabels,
 	}
-	matchAppGID := getNormalizedUID(antreatypes.GenerateNormalizedName(ns, mLabelSelector, nil, nil, nil))
+	matchAppGID := getNormalizedUID(antreatypes.GenerateNormalizedName(ns, mLabelSelector, nil, nil, nil, false))
 	ingressRules := []networkingv1.NetworkPolicyIngressRule{
 		{
 			From: []networkingv1.NetworkPolicyPeer{
@@ -974,8 +974,8 @@ func TestAddNamespace(t *testing.T) {
 			p2 := getPod("p2", "nsA", "nodeA", "2.2.3.4", false)
 			npc.groupingInterface.AddPod(p1)
 			npc.groupingInterface.AddPod(p2)
-			inGroupID := getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorIn, nil, nil).NormalizedName)
-			outGroupID := getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorOut, nil, nil).NormalizedName)
+			inGroupID := getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorIn, nil, nil, false).NormalizedName)
+			outGroupID := getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorOut, nil, nil, false).NormalizedName)
 			npc.syncAddressGroup(inGroupID)
 			npc.syncAddressGroup(outGroupID)
 			npc.syncInternalGroup(groupKey)
@@ -1132,8 +1132,8 @@ func TestDeleteNamespace(t *testing.T) {
 			npc.groupingInterface.AddPod(p1)
 			npc.groupingInterface.AddPod(p2)
 			npc.groupingInterface.DeleteNamespace(tt.deletedNamespace)
-			inGroupID := getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorIn, nil, nil).NormalizedName)
-			outGroupID := getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorOut, nil, nil).NormalizedName)
+			inGroupID := getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorIn, nil, nil, false).NormalizedName)
+			outGroupID := getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorOut, nil, nil, false).NormalizedName)
 			npc.syncAddressGroup(inGroupID)
 			npc.syncAddressGroup(outGroupID)
 			npc.syncInternalGroup(groupKey)
@@ -1374,7 +1374,7 @@ func TestToGroupSelector(t *testing.T) {
 				Namespace:         "nsName",
 				NamespaceSelector: nil,
 				PodSelector:       pLabelSelector,
-				NormalizedName:    antreatypes.GenerateNormalizedName("nsName", pLabelSelector, nil, nil, nil),
+				NormalizedName:    antreatypes.GenerateNormalizedName("nsName", pLabelSelector, nil, nil, nil, false),
 			},
 		},
 		{
@@ -1386,7 +1386,7 @@ func TestToGroupSelector(t *testing.T) {
 				Namespace:         "",
 				NamespaceSelector: nLabelSelector,
 				PodSelector:       nil,
-				NormalizedName:    antreatypes.GenerateNormalizedName("", nil, nLabelSelector, nil, nil),
+				NormalizedName:    antreatypes.GenerateNormalizedName("", nil, nLabelSelector, nil, nil, false),
 			},
 		},
 		{
@@ -1398,7 +1398,7 @@ func TestToGroupSelector(t *testing.T) {
 				Namespace:         "nsName",
 				NamespaceSelector: nil,
 				PodSelector:       pLabelSelector,
-				NormalizedName:    antreatypes.GenerateNormalizedName("nsName", pLabelSelector, nil, nil, nil),
+				NormalizedName:    antreatypes.GenerateNormalizedName("nsName", pLabelSelector, nil, nil, nil, false),
 			},
 		},
 		{
@@ -1410,13 +1410,13 @@ func TestToGroupSelector(t *testing.T) {
 				Namespace:         "",
 				NamespaceSelector: nLabelSelector,
 				PodSelector:       pLabelSelector,
-				NormalizedName:    antreatypes.GenerateNormalizedName("", pLabelSelector, nLabelSelector, nil, nil),
+				NormalizedName:    antreatypes.GenerateNormalizedName("", pLabelSelector, nLabelSelector, nil, nil, false),
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			group := antreatypes.NewGroupSelector(tt.namespace, tt.podSelector, tt.nsSelector, nil, nil)
+			group := antreatypes.NewGroupSelector(tt.namespace, tt.podSelector, tt.nsSelector, nil, nil, false)
 			if group.Namespace != tt.expGroupSelector.Namespace {
 				t.Errorf("Group Namespace incorrectly set. Expected %s, got: %s", tt.expGroupSelector.Namespace, group.Namespace)
 			}
@@ -1496,7 +1496,7 @@ func TestGenerateNormalizedName(t *testing.T) {
 		},
 	}
 	for _, table := range tables {
-		name := antreatypes.GenerateNormalizedName(table.namespace, table.pSelector, table.nSelector, nil, nil)
+		name := antreatypes.GenerateNormalizedName(table.namespace, table.pSelector, table.nSelector, nil, nil, false)
 		if table.expName != name {
 			t.Errorf("Unexpected normalized name. Expected %s, got %s", table.expName, name)
 		}
@@ -1634,7 +1634,7 @@ func TestToAntreaPeer(t *testing.T) {
 	selectorC := metav1.LabelSelector{MatchLabels: map[string]string{"foo3": "bar3"}}
 	selectorAll := metav1.LabelSelector{}
 	matchAllPodsPeer := matchAllPeer
-	matchAllPodsPeer.AddressGroups = []string{getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorAll, nil, nil).NormalizedName)}
+	matchAllPodsPeer.AddressGroups = []string{getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorAll, nil, nil, false).NormalizedName)}
 	tests := []struct {
 		name           string
 		inPeers        []networkingv1.NetworkPolicyPeer
@@ -1655,8 +1655,8 @@ func TestToAntreaPeer(t *testing.T) {
 			},
 			outPeer: controlplane.NetworkPolicyPeer{
 				AddressGroups: []string{
-					getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, &selectorB, nil, nil).NormalizedName),
-					getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorC, nil, nil, nil).NormalizedName),
+					getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, &selectorB, nil, nil, false).NormalizedName),
+					getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorC, nil, nil, nil, false).NormalizedName),
 				},
 			},
 			direction: controlplane.DirectionIn,
@@ -1674,8 +1674,8 @@ func TestToAntreaPeer(t *testing.T) {
 			},
 			outPeer: controlplane.NetworkPolicyPeer{
 				AddressGroups: []string{
-					getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, &selectorB, nil, nil).NormalizedName),
-					getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorC, nil, nil, nil).NormalizedName),
+					getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, &selectorB, nil, nil, false).NormalizedName),
+					getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorC, nil, nil, nil, false).NormalizedName),
 				},
 			},
 			direction: controlplane.DirectionOut,
@@ -1791,7 +1791,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 	selectorC := metav1.LabelSelector{MatchLabels: map[string]string{"foo3": "bar3"}}
 	selectorAll := metav1.LabelSelector{}
 	matchAllPeerEgress := matchAllPeer
-	matchAllPeerEgress.AddressGroups = []string{getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorAll, nil, nil).NormalizedName)}
+	matchAllPeerEgress.AddressGroups = []string{getNormalizedUID(antreatypes.NewGroupSelector("", nil, &selectorAll, nil, nil, false).NormalizedName)}
 	tests := []struct {
 		name                    string
 		existingObjects         []runtime.Object
@@ -1827,7 +1827,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 					Action:        &defaultAction,
 					EnableLogging: false,
 				}},
-				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil).NormalizedName)},
+				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil, false).NormalizedName)},
 			},
 			expectedAppliedToGroups: 1,
 			expectedAddressGroups:   0,
@@ -1872,7 +1872,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 					Priority: defaultRulePriority,
 					Action:   &defaultAction,
 				}},
-				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil).NormalizedName)},
+				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil, false).NormalizedName)},
 			},
 			expectedAppliedToGroups: 1,
 			expectedAddressGroups:   1,
@@ -1898,7 +1898,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 				Rules: []controlplane.NetworkPolicyRule{
 					denyAllIngressRule,
 				},
-				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil).NormalizedName)},
+				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil, false).NormalizedName)},
 			},
 			expectedAppliedToGroups: 1,
 			expectedAddressGroups:   0,
@@ -1922,7 +1922,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 					UID:       "uidA",
 				},
 				Rules:           []controlplane.NetworkPolicyRule{denyAllEgressRule},
-				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil).NormalizedName)},
+				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil, false).NormalizedName)},
 			},
 			expectedAppliedToGroups: 1,
 			expectedAddressGroups:   0,
@@ -1978,7 +1978,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 					{
 						Direction: controlplane.DirectionIn,
 						From: controlplane.NetworkPolicyPeer{
-							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, &selectorC, nil, nil).NormalizedName)},
+							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, &selectorC, nil, nil, false).NormalizedName)},
 						},
 						Services: []controlplane.Service{
 							{
@@ -1993,7 +1993,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 					{
 						Direction: controlplane.DirectionOut,
 						To: controlplane.NetworkPolicyPeer{
-							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, &selectorC, nil, nil).NormalizedName)},
+							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, &selectorC, nil, nil, false).NormalizedName)},
 						},
 						Services: []controlplane.Service{
 							{
@@ -2006,7 +2006,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 						EnableLogging: false,
 					},
 				},
-				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, nil, nil, nil).NormalizedName)},
+				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, nil, nil, nil, false).NormalizedName)},
 			},
 			expectedAppliedToGroups: 1,
 			expectedAddressGroups:   1,
@@ -2058,7 +2058,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 					{
 						Direction: controlplane.DirectionIn,
 						From: controlplane.NetworkPolicyPeer{
-							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, nil, nil, nil).NormalizedName)},
+							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, nil, nil, nil, false).NormalizedName)},
 						},
 						Services: []controlplane.Service{
 							{
@@ -2073,7 +2073,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 					{
 						Direction: controlplane.DirectionIn,
 						From: controlplane.NetworkPolicyPeer{
-							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", nil, &selectorC, nil, nil).NormalizedName)},
+							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", nil, &selectorC, nil, nil, false).NormalizedName)},
 						},
 						Services: []controlplane.Service{
 							{
@@ -2086,7 +2086,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 						EnableLogging: false,
 					},
 				},
-				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, nil, nil, nil).NormalizedName)},
+				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, nil, nil, nil, false).NormalizedName)},
 			},
 			expectedAppliedToGroups: 1,
 			expectedAddressGroups:   2,
@@ -2128,7 +2128,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 					{
 						Direction: controlplane.DirectionIn,
 						From: controlplane.NetworkPolicyPeer{
-							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, nil, nil, nil).NormalizedName)},
+							AddressGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, nil, nil, nil, false).NormalizedName)},
 						},
 						Services: []controlplane.Service{
 							{
@@ -2141,7 +2141,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 						Action:   &defaultAction,
 					},
 				},
-				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, nil, nil, nil).NormalizedName)},
+				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorA, nil, nil, nil, false).NormalizedName)},
 			},
 			expectedAppliedToGroups: 1,
 			expectedAddressGroups:   1,
@@ -2181,7 +2181,7 @@ func TestProcessNetworkPolicy(t *testing.T) {
 					Action:        &defaultAction,
 					EnableLogging: true,
 				}},
-				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil).NormalizedName)},
+				AppliedToGroups: []string{getNormalizedUID(antreatypes.NewGroupSelector("nsA", &metav1.LabelSelector{}, nil, nil, nil, false).NormalizedName)},
 			},
 			expectedAppliedToGroups: 1,
 			expectedAddressGroups:   0,
@@ -2787,7 +2787,7 @@ func TestAddressGroupWithNodeSelector(t *testing.T) {
 	assert.NoError(t, createNode(fakeNode0))
 	assert.NoError(t, createNode(fakeNode1))
 
-	ag := c.createAddressGroup("", nil, nil, nil, &nodeSelectorA)
+	ag := c.createAddressGroup("", nil, nil, nil, &nodeSelectorA, false)
 	assert.NoError(t, c.addressGroupStore.Create(ag))
 	assert.NoError(t, c.syncAddressGroup(ag.Name))
 	addrGroupObj, _, err := c.addressGroupStore.Get(ag.Name)
@@ -2947,9 +2947,9 @@ func TestSyncInternalNetworkPolicy(t *testing.T) {
 		},
 	}
 
-	selectorAGroup := getNormalizedUID(antreatypes.NewGroupSelector("", &selectorA, nil, nil, nil).NormalizedName)
-	selectorBGroup := getNormalizedUID(antreatypes.NewGroupSelector("", &selectorB, nil, nil, nil).NormalizedName)
-	selectorCGroup := getNormalizedUID(antreatypes.NewGroupSelector("", &selectorC, nil, nil, nil).NormalizedName)
+	selectorAGroup := getNormalizedUID(antreatypes.NewGroupSelector("", &selectorA, nil, nil, nil, false).NormalizedName)
+	selectorBGroup := getNormalizedUID(antreatypes.NewGroupSelector("", &selectorB, nil, nil, nil, false).NormalizedName)
+	selectorCGroup := getNormalizedUID(antreatypes.NewGroupSelector("", &selectorC, nil, nil, nil, false).NormalizedName)
 	expectedPolicy := &antreatypes.NetworkPolicy{
 		UID:      "uidA",
 		Name:     "uidA",
@@ -3071,8 +3071,8 @@ func TestSyncInternalNetworkPolicyConcurrently(t *testing.T) {
 		},
 	}
 
-	selectorAGroup := getNormalizedUID(antreatypes.NewGroupSelector("default", &selectorA, nil, nil, nil).NormalizedName)
-	selectorBGroup := getNormalizedUID(antreatypes.NewGroupSelector("default", &selectorB, nil, nil, nil).NormalizedName)
+	selectorAGroup := getNormalizedUID(antreatypes.NewGroupSelector("default", &selectorA, nil, nil, nil, false).NormalizedName)
+	selectorBGroup := getNormalizedUID(antreatypes.NewGroupSelector("default", &selectorB, nil, nil, nil, false).NormalizedName)
 	expectedPolicyA := &antreatypes.NetworkPolicy{
 		UID:      "uidA",
 		Name:     "uidA",
@@ -3166,7 +3166,7 @@ func TestSyncInternalNetworkPolicyWithGroups(t *testing.T) {
 	podA.Labels = selectorA.MatchLabels
 	podB := getPod("podB", "nsB", "nodeB", "10.0.0.2", false)
 	podB.Labels = selectorA.MatchLabels
-	selectorBGroup := getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, nil, nil, nil).NormalizedName)
+	selectorBGroup := getNormalizedUID(antreatypes.NewGroupSelector("nsA", &selectorB, nil, nil, nil, false).NormalizedName)
 
 	tests := []struct {
 		name           string
@@ -3474,7 +3474,7 @@ func TestSyncAppliedToGroupWithExternalEntity(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, npc := newController()
 			npc.groupingInterface.AddExternalEntity(tt.addedExternalEntity)
-			groupSelector := antreatypes.NewGroupSelector("nsA", nil, nil, &selectorSpec, nil)
+			groupSelector := antreatypes.NewGroupSelector("nsA", nil, nil, &selectorSpec, nil, false)
 			appGroupID := getNormalizedUID(groupSelector.NormalizedName)
 			appliedToGroup := &antreatypes.AppliedToGroup{
 				Name:     appGroupID,

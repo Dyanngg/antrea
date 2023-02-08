@@ -109,10 +109,12 @@ type labelIdentityMatch struct {
 // matches knows if a LabelIdentity matches a selectorItem.
 func (l *labelIdentityMatch) matches(s *selectorItem) bool {
 	selectorItemNamespace := s.selector.Namespace
-	if selectorItemNamespace != emptyNamespace && selectorItemNamespace != l.namespace {
+	// TODO: comment
+	if selectorItemNamespace != emptyNamespace && (selectorItemNamespace == l.namespace) == s.selector.NamespaceInverted {
 		return false
 	}
-	if s.selector.NamespaceSelector != nil && !s.selector.NamespaceSelector.Matches(labels.Set(l.namespaceLabels)) {
+	// TODO: comment
+	if s.selector.NamespaceSelector != nil && s.selector.NamespaceSelector.Matches(labels.Set(l.namespaceLabels)) == s.selector.NamespaceInverted {
 		return false
 	}
 	// At this stage Namespace has matched

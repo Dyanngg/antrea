@@ -145,6 +145,9 @@ type groupItem struct {
 type selectorItem struct {
 	// The label selector that will be used for matching.
 	selector *types.GroupSelector
+	// namespaceInverted signifies whether the Namespaces selected by the selector above
+	// should be inverted (i.e. match all Namespaces that are not these Namespaces).
+	namespaceInverted bool
 	// The keys of the groupItems that share the selectorItem.
 	groupItemKeys sets.String
 	// The keys of the labelItems that match the selectorItem.
@@ -384,7 +387,7 @@ func (i *GroupEntityIndex) createLabelItem(entityType entityType, eItem *entityI
 	scanSelectorItems := func(selectorItemKeys sets.String) {
 		for sKey := range selectorItemKeys {
 			sItem := i.selectorItems[sKey]
-			matched := i.match(lItem.entityType, lItem.labels, lItem.namespace, sItem.selector)
+			matched := i.match(lItem.entityType, lItem.labels, lItem.namespace, sItem)
 			if matched {
 				sItem.labelItemKeys.Insert(eItem.labelItemKey)
 				lItem.selectorItemKeys.Insert(sKey)
@@ -559,14 +562,22 @@ func (i *GroupEntityIndex) createSelectorItem(gItem *groupItem) *selectorItem {
 
 	// Scan potential labelItems and associates the new selectorItem with the matched ones.
 	if sItem.selector.Namespace != "" {
-		// The selector is Namespace scoped, it can only match labelItems in this Namespace.
-		labelItemKeys, _ := i.labelItemIndex[entityType][sItem.selector.Namespace]
-		i.scanLabelItems(labelItemKeys, sItem)
+		if !sItem.namespaceInverted {
+			// The selector is Namespace scoped, it can only match labelItems in this Namespace.
+			labelItemKeys, _ := i.labelItemIndex[entityType][sItem.selector.Namespace]
+			i.scanLabelItems(labelItemKeys, sItem)
+		} else {
+			for ns, nsKeys := range i.labelItemIndex[entityType] {
+				if ns != sItem.selector.Namespace {
+					i.scanLabelItems(nsKeys, sItem)
+				}
+			}
+		}
 	} else if sItem.selector.NamespaceSelector != nil && !sItem.selector.NamespaceSelector.Empty() {
 		// The selector is Cluster scoped and has non-empty NamespaceSelector, scan labelItems in a Namespace only if
 		// the Namespace's labels match.
 		for namespace, namespaceLabel := range i.namespaceLabels {
-			if sItem.selector.NamespaceSelector.Matches(namespaceLabel) {
+			if sItem.selector.NamespaceSelector.Matches(namespaceLabel) == sItem.namespaceInverted {
 				i.scanLabelItems(i.labelItemIndex[entityType][namespace], sItem)
 			}
 		}
@@ -584,7 +595,7 @@ func (i *GroupEntityIndex) scanLabelItems(labelItemKeys sets.String, sItem *sele
 	updated := false
 	for lKey := range labelItemKeys {
 		lItem := i.labelItems[lKey]
-		if i.match(lItem.entityType, lItem.labels, lItem.namespace, sItem.selector) {
+		if i.match(lItem.entityType, lItem.labels, lItem.namespace, sItem) {
 			// Connect the selector and the label if they didn't match before, otherwise do nothing.
 			if !sItem.labelItemKeys.Has(lKey) {
 				sItem.labelItemKeys.Insert(lKey)
@@ -693,13 +704,13 @@ func (i *GroupEntityIndex) setSynced(synced bool) {
 	i.synced.Store(synced)
 }
 
-func (i *GroupEntityIndex) match(entityType entityType, label labels.Set, namespace string, sel *types.GroupSelector) bool {
-	objSelector := sel.PodSelector
+func (i *GroupEntityIndex) match(entityType entityType, label labels.Set, labelNamespace string, sItem *selectorItem) bool {
+	objSelector := sItem.selector.PodSelector
 	if entityType == externalEntityType {
-		objSelector = sel.ExternalEntitySelector
+		objSelector = sItem.selector.ExternalEntitySelector
 	}
-	if sel.Namespace != "" {
-		if sel.Namespace != namespace {
+	if sItem.selector.Namespace != "" {
+		if (sItem.selector.Namespace == labelNamespace) == sItem.namespaceInverted {
 			// Pods or ExternalEntities must be matched within the same Namespace.
 			return false
 		}
@@ -709,13 +720,13 @@ func (i *GroupEntityIndex) match(entityType entityType, label labels.Set, namesp
 		}
 		return true
 	}
-	if sel.NamespaceSelector != nil {
-		if !sel.NamespaceSelector.Empty() {
-			namespaceLabels, exists := i.namespaceLabels[namespace]
+	if sItem.selector.NamespaceSelector != nil {
+		if !sItem.selector.NamespaceSelector.Empty() {
+			namespaceLabels, exists := i.namespaceLabels[labelNamespace]
 			if !exists {
 				return false
 			}
-			if !sel.NamespaceSelector.Matches(namespaceLabels) {
+			if sItem.selector.NamespaceSelector.Matches(namespaceLabels) == sItem.namespaceInverted {
 				// Pod's Namespace does not match namespaceSelector.
 				return false
 			}
