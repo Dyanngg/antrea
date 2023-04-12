@@ -51,6 +51,7 @@ var getRemoteConfigAndClient = commonarea.GetRemoteConfigAndClient
 type MemberClusterSetReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
+	mutex     *sync.RWMutex
 	Namespace string
 	// commonAreaLock protects the access to RemoteCommonArea.
 	commonAreaLock sync.RWMutex
@@ -69,10 +70,12 @@ func NewMemberClusterSetReconciler(client client.Client,
 	scheme *runtime.Scheme,
 	namespace string,
 	enableStretchedNetworkPolicy bool,
+	mutex *sync.RWMutex,
 ) *MemberClusterSetReconciler {
 	return &MemberClusterSetReconciler{
 		Client:                       client,
 		Scheme:                       scheme,
+		mutex:                        mutex,
 		Namespace:                    namespace,
 		enableStretchedNetworkPolicy: enableStretchedNetworkPolicy,
 	}
@@ -228,6 +231,7 @@ func (r *MemberClusterSetReconciler) createOrUpdateRemoteCommonArea(clusterSet *
 	resImportReconciler := newResourceImportReconciler(
 		remoteCommonAreaMgr.GetClient(),
 		remoteCommonAreaMgr.GetScheme(),
+		r.mutex,
 		r.Client,
 		string(r.clusterID),
 		r.Namespace,
@@ -239,6 +243,7 @@ func (r *MemberClusterSetReconciler) createOrUpdateRemoteCommonArea(clusterSet *
 		labelIdentityImpReconciler := newLabelIdentityResourceImportReconciler(
 			remoteCommonAreaMgr.GetClient(),
 			remoteCommonAreaMgr.GetScheme(),
+			r.mutex,
 			r.Client,
 			string(clusterID),
 			remoteNamespace,

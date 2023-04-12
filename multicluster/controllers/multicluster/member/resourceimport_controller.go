@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -60,6 +61,7 @@ func resImportIndexerKeyFunc(obj interface{}) (string, error) {
 type ResourceImportReconciler struct {
 	client.Client
 	Scheme              *runtime.Scheme
+	mutex               *sync.RWMutex
 	localClusterClient  client.Client
 	localClusterID      string
 	namespace           string
@@ -69,11 +71,12 @@ type ResourceImportReconciler struct {
 	manager ctrl.Manager
 }
 
-func newResourceImportReconciler(client client.Client, scheme *runtime.Scheme, localClusterClient client.Client,
+func newResourceImportReconciler(client client.Client, scheme *runtime.Scheme, mutex *sync.RWMutex, localClusterClient client.Client,
 	localClusterID string, namespace string, remoteCommonArea commonarea.RemoteCommonArea) *ResourceImportReconciler {
 	return &ResourceImportReconciler{
 		Client:             client,
 		Scheme:             scheme,
+		mutex:              mutex,
 		localClusterClient: localClusterClient,
 		localClusterID:     localClusterID,
 		namespace:          namespace,
@@ -98,6 +101,8 @@ func newResourceImportReconciler(client client.Client, scheme *runtime.Scheme, l
 // Reconcile will attempt to ensure that the imported Resource is installed in local cluster as per the
 // ResourceImport object.
 func (r *ResourceImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
 	klog.V(2).InfoS("Reconciling ResourceImport", "resourceimport", req.NamespacedName)
 	// TODO: Must check whether this ResourceImport must be reconciled by this member cluster. Check `spec.clusters` field.
 	var resImp multiclusterv1alpha1.ResourceImport

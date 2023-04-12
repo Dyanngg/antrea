@@ -17,6 +17,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"k8s.io/klog/v2"
@@ -56,6 +57,7 @@ func runMember(o *Options) error {
 		return err
 	}
 
+	var staleReconcileMutex sync.RWMutex
 	stopCh := signals.RegisterSignalHandlers()
 	hookServer := mgr.GetWebhookServer()
 	hookServer.Register("/validate-multicluster-crd-antrea-io-v1alpha1-gateway",
@@ -67,6 +69,7 @@ func runMember(o *Options) error {
 		mgr.GetScheme(),
 		env.GetPodNamespace(),
 		o.EnableStretchedNetworkPolicy,
+		&staleReconcileMutex,
 	)
 	if err = clusterSetReconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("error creating ClusterSet controller: %v", err)
@@ -118,6 +121,7 @@ func runMember(o *Options) error {
 		env.GetPodNamespace(),
 		commonAreaGetter,
 		multiclustercontrollers.MemberCluster,
+		&staleReconcileMutex,
 	)
 
 	go staleController.Run(stopCh)

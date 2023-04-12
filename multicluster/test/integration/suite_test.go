@@ -18,6 +18,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -105,6 +106,7 @@ var _ = BeforeSuite(func() {
 	}
 
 	var err error
+	var staleReconcileMutex sync.RWMutex
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
@@ -140,6 +142,7 @@ var _ = BeforeSuite(func() {
 		k8sManager.GetScheme(),
 		LeaderNamespace,
 		false,
+		&staleReconcileMutex,
 	)
 	err = clusterSetReconciler.SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
@@ -164,6 +167,7 @@ var _ = BeforeSuite(func() {
 		"default",
 		clusterSetReconciler,
 		multiclustercontrollers.MemberCluster,
+		&staleReconcileMutex,
 	)
 
 	go staleController.Run(stopCh)

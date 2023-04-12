@@ -18,8 +18,11 @@ package multicluster
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"time"
 
+	mutexassert "github.com/trailofbits/go-mutexasserts"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,6 +56,7 @@ const (
 // cluster in the ClusterSet.Spec.Members when it runs in the leader cluster.
 type StaleResCleanupController struct {
 	client.Client
+	mutex            *sync.RWMutex
 	Scheme           *runtime.Scheme
 	localClusterID   string
 	commonAreaGetter commonarea.RemoteCommonAreaGetter
@@ -68,9 +72,11 @@ func NewStaleResCleanupController(
 	namespace string,
 	commonAreaGetter commonarea.RemoteCommonAreaGetter,
 	clusterRole string,
+	mutex *sync.RWMutex,
 ) *StaleResCleanupController {
 	reconciler := &StaleResCleanupController{
 		Client:           Client,
+		mutex:            mutex,
 		Scheme:           Scheme,
 		namespace:        namespace,
 		commonAreaGetter: commonAreaGetter,
@@ -86,6 +92,11 @@ func NewStaleResCleanupController(
 // +kubebuilder:rbac:groups=multicluster.crd.antrea.io,resources=resourceexports,verbs=get;list;watch;delete
 
 func (c *StaleResCleanupController) cleanup() error {
+	if mutexassert.RWMutexRLocked(c.mutex) {
+		return fmt.Errorf("controllers are actively reconciling resources, backing off")
+	}
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	switch c.clusterRole {
 	case LeaderCluster:
 		return c.cleanupStaleResourcesOnLeader()

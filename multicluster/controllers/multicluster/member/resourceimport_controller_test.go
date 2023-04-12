@@ -20,6 +20,7 @@ import (
 	"context"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,6 +46,8 @@ var (
 	leaderNamespace  = "default"
 	svcResImportName = leaderNamespace + "-" + "nginx-service"
 	epResImportName  = leaderNamespace + "-" + "nginx-endpoints"
+
+	staleReconcileMutex sync.RWMutex
 
 	svcImportReq = ctrl.Request{NamespacedName: types.NamespacedName{
 		Namespace: leaderNamespace,
@@ -141,7 +144,7 @@ func TestResourceImportReconciler_handleCreateEvent(t *testing.T) {
 		},
 	}
 
-	r := newResourceImportReconciler(fakeClient, scheme, fakeClient, localClusterID, "default", remoteCluster)
+	r := newResourceImportReconciler(fakeClient, scheme, &staleReconcileMutex, fakeClient, localClusterID, "default", remoteCluster)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if _, err := r.Reconcile(ctx, tt.req); err != nil {
@@ -211,7 +214,7 @@ func TestResourceImportReconciler_handleDeleteEvent(t *testing.T) {
 		},
 	}
 
-	r := newResourceImportReconciler(fakeClient, scheme, fakeClient, localClusterID, "default", remoteCluster)
+	r := newResourceImportReconciler(fakeClient, scheme, &staleReconcileMutex, fakeClient, localClusterID, "default", remoteCluster)
 	r.installedResImports.Add(*svcResImport)
 	r.installedResImports.Add(*epResImport)
 
@@ -452,7 +455,7 @@ func TestResourceImportReconciler_handleUpdateEvent(t *testing.T) {
 		},
 	}
 
-	r := newResourceImportReconciler(fakeClient, scheme, fakeClient, localClusterID, "default", remoteCluster)
+	r := newResourceImportReconciler(fakeClient, scheme, &staleReconcileMutex, fakeClient, localClusterID, "default", remoteCluster)
 	r.installedResImports.Add(*svcResImport)
 	r.installedResImports.Add(*epResImport)
 

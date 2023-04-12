@@ -15,6 +15,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"k8s.io/klog/v2"
@@ -66,6 +67,7 @@ func runLeader(o *Options) error {
 		return fmt.Errorf("error creating MemberClusterAnnounce controller: %v", err)
 	}
 
+	var staleReconcileMutex sync.RWMutex
 	noCachedClient, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme(), Mapper: mgr.GetRESTMapper()})
 	if err != nil {
 		return err
@@ -111,6 +113,7 @@ func runLeader(o *Options) error {
 		env.GetPodNamespace(),
 		nil,
 		multiclustercontrollers.LeaderCluster,
+		&staleReconcileMutex,
 	)
 
 	go staleController.Run(stopCh)

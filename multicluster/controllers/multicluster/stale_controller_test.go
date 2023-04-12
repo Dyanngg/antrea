@@ -18,6 +18,7 @@ package multicluster
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,6 +36,10 @@ import (
 	"antrea.io/antrea/multicluster/controllers/multicluster/commonarea"
 	"antrea.io/antrea/multicluster/controllers/multicluster/member"
 	"antrea.io/antrea/pkg/apis/crd/v1alpha1"
+)
+
+var (
+	staleReconcileMutex sync.RWMutex
 )
 
 func TestStaleController_CleanupService(t *testing.T) {
@@ -96,9 +101,9 @@ func TestStaleController_CleanupService(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().WithScheme(common.TestScheme).WithLists(tt.existSvcList, tt.existSvcImpList).Build()
 			fakeRemoteClient := fake.NewClientBuilder().WithScheme(common.TestScheme).WithLists(tt.existingResImpList).Build()
 			commonArea := commonarea.NewFakeRemoteCommonArea(fakeRemoteClient, "leader-cluster", common.LocalClusterID, "default", nil)
-			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false)
+			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false, &staleReconcileMutex)
 			mcReconciler.SetRemoteCommonArea(commonArea)
-			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster)
+			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster, &staleReconcileMutex)
 			if err := c.cleanup(); err != nil {
 				t.Errorf("StaleController.cleanup() should clean up all stale Service and ServiceImport but got err = %v", err)
 			}
@@ -191,9 +196,9 @@ func TestStaleController_CleanupACNP(t *testing.T) {
 			fakeRemoteClient := fake.NewClientBuilder().WithScheme(common.TestScheme).WithLists(tt.existingResImpList).Build()
 			commonArea := commonarea.NewFakeRemoteCommonArea(fakeRemoteClient, "leader-cluster", common.LocalClusterID, "default", nil)
 
-			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false)
+			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false, &staleReconcileMutex)
 			mcReconciler.SetRemoteCommonArea(commonArea)
-			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster)
+			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster, &staleReconcileMutex)
 			if err := c.cleanup(); err != nil {
 				t.Errorf("StaleController.cleanup() should clean up all stale ACNPs but got err = %v", err)
 			}
@@ -386,9 +391,9 @@ func TestStaleController_CleanupResourceExport(t *testing.T) {
 			fakeRemoteClient := fake.NewClientBuilder().WithScheme(common.TestScheme).WithLists(tt.existResExpList).Build()
 			commonArea := commonarea.NewFakeRemoteCommonArea(fakeRemoteClient, "leader-cluster", common.LocalClusterID, "default", nil)
 
-			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false)
+			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false, &staleReconcileMutex)
 			mcReconciler.SetRemoteCommonArea(commonArea)
-			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster)
+			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster, &staleReconcileMutex)
 			if err := c.cleanup(); err != nil {
 				t.Errorf("StaleController.cleanup() should clean up all stale ResourceExports but got err = %v", err)
 			}
@@ -463,9 +468,9 @@ func TestStaleController_CleanupClusterInfoImport(t *testing.T) {
 			fakeRemoteClient := fake.NewClientBuilder().WithScheme(common.TestScheme).WithLists(tt.existingResImpList).Build()
 			commonarea := commonarea.NewFakeRemoteCommonArea(fakeRemoteClient, "leader-cluster", common.LocalClusterID, "antrea-mcs", nil)
 
-			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false)
+			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false, &staleReconcileMutex)
 			mcReconciler.SetRemoteCommonArea(commonarea)
-			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster)
+			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster, &staleReconcileMutex)
 			if err := c.cleanup(); err != nil {
 				t.Errorf("StaleController.cleanup() should clean up all stale ClusterInfoImport but got err = %v", err)
 			}
@@ -585,8 +590,8 @@ func TestStaleController_CleanupMemberClusterAnnounce(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().WithScheme(common.TestScheme).WithLists(tt.memberClusterAnnounceList).WithLists(tt.clusterSet).Build()
 
-			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false)
-			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, LeaderCluster)
+			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false, &staleReconcileMutex)
+			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, LeaderCluster, &staleReconcileMutex)
 			assert.Equal(t, nil, c.cleanup())
 
 			memberClusterAnnounceList := &mcsv1alpha1.MemberClusterAnnounceList{}
@@ -661,9 +666,9 @@ func TestStaleController_CleanupLabelIdentites(t *testing.T) {
 			fakeRemoteClient := fake.NewClientBuilder().WithScheme(common.TestScheme).WithLists(tt.existingResImpList).Build()
 			ca := commonarea.NewFakeRemoteCommonArea(fakeRemoteClient, "leader-cluster", common.LocalClusterID, "antrea-mcs", nil)
 
-			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false)
+			mcReconciler := member.NewMemberClusterSetReconciler(fakeClient, common.TestScheme, "default", false, &staleReconcileMutex)
 			mcReconciler.SetRemoteCommonArea(ca)
-			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster)
+			c := NewStaleResCleanupController(fakeClient, common.TestScheme, "default", mcReconciler, MemberCluster, &staleReconcileMutex)
 			if err := c.cleanup(); err != nil {
 				t.Errorf("StaleController.cleanup() should clean up all stale LabelIdentities but got err = %v", err)
 			}

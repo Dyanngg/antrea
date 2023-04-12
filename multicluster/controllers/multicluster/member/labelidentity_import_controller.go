@@ -18,6 +18,7 @@ package member
 
 import (
 	"context"
+	"sync"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,6 +39,7 @@ import (
 // LabelIdentityResourceImportReconciler reconciles a LabelIdentity kind of ResourceImport object in the member cluster.
 type LabelIdentityResourceImportReconciler struct {
 	client.Client
+	mutex              *sync.RWMutex
 	Scheme             *runtime.Scheme
 	localClusterClient client.Client
 	localClusterID     string
@@ -47,10 +49,11 @@ type LabelIdentityResourceImportReconciler struct {
 	manager ctrl.Manager
 }
 
-func newLabelIdentityResourceImportReconciler(client client.Client, scheme *runtime.Scheme, localClusterClient client.Client,
+func newLabelIdentityResourceImportReconciler(client client.Client, scheme *runtime.Scheme, mutex *sync.RWMutex, localClusterClient client.Client,
 	localClusterID string, namespace string, remoteCommonArea commonarea.RemoteCommonArea) *LabelIdentityResourceImportReconciler {
 	return &LabelIdentityResourceImportReconciler{
 		Client:             client,
+		mutex:              mutex,
 		Scheme:             scheme,
 		localClusterClient: localClusterClient,
 		localClusterID:     localClusterID,
@@ -60,6 +63,8 @@ func newLabelIdentityResourceImportReconciler(client client.Client, scheme *runt
 }
 
 func (r *LabelIdentityResourceImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
 	klog.V(2).InfoS("Reconciling LabelIdentity kind of ResourceImport", "resourceImport", req.NamespacedName)
 	var labelIdentityResImport multiclusterv1alpha1.ResourceImport
 	err := r.remoteCommonArea.Get(ctx, req.NamespacedName, &labelIdentityResImport)
