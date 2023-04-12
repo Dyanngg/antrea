@@ -342,10 +342,12 @@ func run(o *Options) error {
 		)
 		gwInformer := mcInformerFactoryWithNamespaceOption.Multicluster().V1alpha1().Gateways()
 		ciImportInformer := mcInformerFactoryWithNamespaceOption.Multicluster().V1alpha1().ClusterInfoImports()
+		clusterAccessInformer := mcInformerFactoryWithNamespaceOption.Multicluster().V1alpha1().ClusterAccesses()
 		mcDefaultRouteController = mcroute.NewMCDefaultRouteController(
 			mcClient,
 			gwInformer,
 			ciImportInformer,
+			clusterAccessInformer,
 			ofClient,
 			nodeConfig,
 			networkConfig,

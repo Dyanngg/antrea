@@ -59,7 +59,6 @@ func newMCDefaultRouteController(t *testing.T,
 	)
 	gwInformer := mcInformerFactory.Multicluster().V1alpha1().Gateways()
 	ciImportInformer := mcInformerFactory.Multicluster().V1alpha1().ClusterInfoImports()
-
 	multiclusterConfig := agent.MulticlusterConfig{
 		Enable:                       true,
 		EnableGateway:                true,
@@ -69,12 +68,14 @@ func newMCDefaultRouteController(t *testing.T,
 		WireGuard:                    wireGuardConfig,
 		TrafficEncryptionMode:        trafficEncryptionMode,
 	}
+	clusterAccessInformer := mcInformerFactory.Multicluster().V1alpha1().ClusterAccesses()
 	ctrl := gomock.NewController(t)
 	ofClient := oftest.NewMockClient(ctrl)
 	c := NewMCDefaultRouteController(
 		mcClient,
 		gwInformer,
 		ciImportInformer,
+		clusterAccessInformer,
 		ofClient,
 		nodeConfig,
 		networkConfig,

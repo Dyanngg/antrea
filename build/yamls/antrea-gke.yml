@@ -3803,21 +3803,15 @@ rules:
   - apiGroups:
     - multicluster.crd.antrea.io
     resources:
-    - gateways
+      - gateways
+      - clusterinfoimports
+      - labelidentities
+      - clusteraccesses
     verbs:
-    - get
-    - list
-    - watch
-    - patch
-  - apiGroups:
-    - multicluster.crd.antrea.io
-    resources:
-    - clusterinfoimports
-    - labelidentities
-    verbs:
-    - get
-    - list
-    - watch
+      - get
+      - list
+      - watch
+      - patch
 ---
 # Source: antrea/templates/antctl/clusterrole.yaml
 kind: ClusterRole

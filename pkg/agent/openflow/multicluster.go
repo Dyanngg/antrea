@@ -86,9 +86,9 @@ func (f *featureMulticluster) l3FwdFlowToRemoteGateway(
 			Cookie(cookieID).
 			MatchProtocol(ipProtocol).
 			MatchDstIPNet(peerServiceCIDR).
-			Action().SetSrcMAC(localGatewayMAC).                 // Rewrite src MAC to local gateway MAC.
+			Action().SetSrcMAC(localGatewayMAC). // Rewrite src MAC to local gateway MAC.
 			Action().SetDstMAC(GlobalVirtualMACForMulticluster). // Rewrite dst MAC to virtual MC MAC.
-			Action().SetTunnelDst(tunnelPeer).                   // Flow based tunnel. Set tunnel destination.
+			Action().SetTunnelDst(tunnelPeer). // Flow based tunnel. Set tunnel destination.
 			Action().LoadRegMark(ToTunnelRegMark).
 			Action().GotoTable(L3DecTTLTable.GetID()).
 			Done(),
@@ -126,6 +126,26 @@ func (f *featureMulticluster) l3FwdFlowToRemoteGateway(
 	}
 	return flows
 }
+
+func (f *featureMulticluster) remoteGatewayDropFlow(remoteGWIP net.IP) binding.Flow {
+	ipProtocol := getIPProtocol(remoteGWIP)
+	return ClassifierTable.ofTable.BuildFlow(priorityGateway).
+		Cookie(f.cookieAllocator.Request(f.category).Raw()).
+		MatchProtocol(ipProtocol).
+		MatchSrcIP(remoteGWIP).
+		// TODO: need send to drop metrics collecting?
+		Action().Drop().
+		Done()
+}
+
+//func (f *featureMulticluster) clusterAccessIsolationFlow() binding.Flow {
+//	return ClassifierTable.ofTable.BuildFlow(priorityNormal).
+//		Cookie(f.cookieAllocator.Request(f.category).Raw()).
+//		MatchDstMAC(GlobalVirtualMACForMulticluster).
+//		// TODO: need send to drop metrics collecting?
+//		Action().Drop().
+//		Done()
+//}
 
 func (f *featureMulticluster) tunnelClassifierFlow(tunnelOFPort uint32) binding.Flow {
 	return ClassifierTable.ofTable.BuildFlow(priorityHigh).
@@ -202,7 +222,7 @@ func (f *featureMulticluster) l3FwdFlowToPodViaTun(
 		MatchDstIP(podIP).
 		MatchDstMAC(GlobalVirtualMACForMulticluster).
 		Action().SetSrcMAC(localGatewayMAC). // Rewrite src MAC to local gateway MAC.
-		Action().SetTunnelDst(tunnelPeer).   // Flow based tunnel. Set tunnel destination.
+		Action().SetTunnelDst(tunnelPeer). // Flow based tunnel. Set tunnel destination.
 		Action().LoadRegMark(ToTunnelRegMark).
 		Action().GotoTable(L3DecTTLTable.GetID()).
 		Done()

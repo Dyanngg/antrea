@@ -200,6 +200,7 @@ var (
 	NonIPTable = newTable("NonIP", stageClassifier, pipelineNonIP, defaultDrop)
 
 	// Flow priority level
+	priorityGateway         = uint16(220)
 	priorityHigh            = uint16(210)
 	priorityNormal          = uint16(200)
 	priorityLow             = uint16(190)

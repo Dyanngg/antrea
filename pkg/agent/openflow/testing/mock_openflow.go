@@ -314,6 +314,20 @@ func (mr *MockClientMockRecorder) InstallMulticastRemoteReportFlows(arg0 interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InstallMulticastRemoteReportFlows", reflect.TypeOf((*MockClient)(nil).InstallMulticastRemoteReportFlows), arg0)
 }
 
+// InstallMulticlusterAccessFlows mocks base method
+func (m *MockClient) InstallMulticlusterAccessFlows(arg0 bool, arg1 []net.IP) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InstallMulticlusterAccessFlows", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InstallMulticlusterAccessFlows indicates an expected call of InstallMulticlusterAccessFlows
+func (mr *MockClientMockRecorder) InstallMulticlusterAccessFlows(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InstallMulticlusterAccessFlows", reflect.TypeOf((*MockClient)(nil).InstallMulticlusterAccessFlows), arg0, arg1)
+}
+
 // InstallMulticlusterClassifierFlows mocks base method
 func (m *MockClient) InstallMulticlusterClassifierFlows(arg0 uint32, arg1 bool) error {
 	m.ctrl.T.Helper()

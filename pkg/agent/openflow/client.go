@@ -345,6 +345,9 @@ type Client interface {
 		localGatewayIP net.IP,
 		enableStretchedNetworkPolicy bool) error
 
+	// TODO: comment
+	InstallMulticlusterAccessFlows(accessRestricted bool, deniedPeers []net.IP) error
+
 	// InstallMulticlusterClassifierFlows installs flows to classify cross-cluster packets.
 	InstallMulticlusterClassifierFlows(tunnelOFPort uint32, isGateway bool) error
 
@@ -1460,6 +1463,19 @@ func (c *client) InstallMulticlusterNodeFlows(clusterID string,
 		flows = append(flows, c.featureMulticluster.l3FwdFlowToRemoteGateway(localGatewayMAC, *peerCIDR, tunnelPeerIP, remoteGatewayIP, enableStretchedNetworkPolicy)...)
 	}
 	return c.modifyFlows(c.featureMulticluster.cachedFlows, cacheKey, flows)
+}
+
+func (c *client) InstallMulticlusterAccessFlows(accessRestricted bool, deniedPeers []net.IP) error {
+	c.replayMutex.RLock()
+	defer c.replayMutex.RUnlock()
+	var flows []binding.Flow
+	if accessRestricted {
+		//flows = append(flows, c.featureMulticluster.clusterAccessIsolationFlow())
+		for _, ip := range deniedPeers {
+			flows = append(flows, c.featureMulticluster.remoteGatewayDropFlow(ip))
+		}
+	}
+	return c.modifyFlows(c.featureMulticluster.cachedFlows, "clusteraccess", flows)
 }
 
 // InstallMulticlusterGatewayFlows installs flows to handle cross-cluster packets between Gateways.

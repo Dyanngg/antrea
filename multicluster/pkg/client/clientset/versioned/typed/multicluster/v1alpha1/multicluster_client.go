@@ -1,4 +1,4 @@
-// Copyright 2022 Antrea Authors
+// Copyright 2023 Antrea Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 
 type MulticlusterV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	ClusterAccessesGetter
 	ClusterInfoImportsGetter
 	ClusterSetsGetter
 	GatewaysGetter
@@ -38,6 +39,10 @@ type MulticlusterV1alpha1Interface interface {
 // MulticlusterV1alpha1Client is used to interact with features provided by the multicluster.crd.antrea.io group.
 type MulticlusterV1alpha1Client struct {
 	restClient rest.Interface
+}
+
+func (c *MulticlusterV1alpha1Client) ClusterAccesses(namespace string) ClusterAccessInterface {
+	return newClusterAccesses(c, namespace)
 }
 
 func (c *MulticlusterV1alpha1Client) ClusterInfoImports(namespace string) ClusterInfoImportInterface {

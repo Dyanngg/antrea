@@ -33,6 +33,7 @@ import (
 	"k8s.io/klog/v2"
 
 	mcv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
+	"antrea.io/antrea/multicluster/controllers/multicluster/common"
 	mcclientset "antrea.io/antrea/multicluster/pkg/client/clientset/versioned"
 	mcinformersv1alpha1 "antrea.io/antrea/multicluster/pkg/client/informers/externalversions/multicluster/v1alpha1"
 	mclisters "antrea.io/antrea/multicluster/pkg/client/listers/multicluster/v1alpha1"
@@ -66,20 +67,23 @@ var (
 // It is responsible for setting up necessary Openflow entries for multi-cluster
 // traffic on a Gateway or a regular Node.
 type MCDefaultRouteController struct {
-	mcClient             mcclientset.Interface
-	ofClient             openflow.Client
-	routeClient          antrearoute.Interface
-	wireGuardClient      wireguard.Interface
-	nodeConfig           *config.NodeConfig
-	networkConfig        *config.NetworkConfig
-	wireGuardConfig      *config.WireGuardConfig
-	gwInformer           mcinformersv1alpha1.GatewayInformer
-	gwLister             mclisters.GatewayLister
-	gwListerSynced       cache.InformerSynced
-	ciImportInformer     mcinformersv1alpha1.ClusterInfoImportInformer
-	ciImportLister       mclisters.ClusterInfoImportLister
-	ciImportListerSynced cache.InformerSynced
-	queue                workqueue.RateLimitingInterface
+	mcClient                  mcclientset.Interface
+	ofClient                  openflow.Client
+	routeClient               antrearoute.Interface
+	wireGuardClient           wireguard.Interface
+	nodeConfig                *config.NodeConfig
+	networkConfig             *config.NetworkConfig
+	wireGuardConfig           *config.WireGuardConfig
+	gwInformer                mcinformersv1alpha1.GatewayInformer
+	gwLister                  mclisters.GatewayLister
+	gwListerSynced            cache.InformerSynced
+	ciImportInformer          mcinformersv1alpha1.ClusterInfoImportInformer
+	ciImportLister            mclisters.ClusterInfoImportLister
+	ciImportListerSynced      cache.InformerSynced
+	clusterAccessInformer     mcinformersv1alpha1.ClusterAccessInformer
+	clusterAccessLister       mclisters.ClusterAccessLister
+	clusterAccessListerSynced cache.InformerSynced
+	queue                     workqueue.RateLimitingInterface
 	// installedCIImports is for saving ClusterInfos which have been processed
 	// in MCDefaultRouteController. Need to use mutex to protect 'installedCIImports' if
 	// we change the number of 'defaultWorkers'.
@@ -93,12 +97,15 @@ type MCDefaultRouteController struct {
 	enableStretchedNetworkPolicy bool
 	enablePodToPodConnectivity   bool
 	wireGuardInitialized         bool
+	clusterAccessRestricted      bool
+	connectivityAllowedClusters  sets.Set[string]
 }
 
 func NewMCDefaultRouteController(
 	mcClient mcclientset.Interface,
 	gwInformer mcinformersv1alpha1.GatewayInformer,
 	ciImportInformer mcinformersv1alpha1.ClusterInfoImportInformer,
+	clusterAccessInformer mcinformersv1alpha1.ClusterAccessInformer,
 	client openflow.Client,
 	nodeConfig *config.NodeConfig,
 	networkConfig *config.NetworkConfig,
@@ -117,12 +124,16 @@ func NewMCDefaultRouteController(
 		ciImportInformer:             ciImportInformer,
 		ciImportLister:               ciImportInformer.Lister(),
 		ciImportListerSynced:         ciImportInformer.Informer().HasSynced,
+		clusterAccessInformer:        clusterAccessInformer,
+		clusterAccessLister:          clusterAccessInformer.Lister(),
+		clusterAccessListerSynced:    clusterAccessInformer.Informer().HasSynced,
 		queue:                        workqueue.NewNamedRateLimitingQueue(workqueue.NewItemExponentialFailureRateLimiter(minRetryDelay, maxRetryDelay), "gatewayroute"),
 		installedCIImports:           make(map[string]*mcv1alpha1.ClusterInfoImport),
 		installedWireGuardPeers:      make(map[string]*mcv1alpha1.ClusterInfoImport),
 		namespace:                    multiclusterConfig.Namespace,
 		enableStretchedNetworkPolicy: multiclusterConfig.EnableStretchedNetworkPolicy,
 		enablePodToPodConnectivity:   multiclusterConfig.EnablePodToPodConnectivity,
+		connectivityAllowedClusters:  sets.New[string](),
 	}
 	_, trafficEncryptionMode := config.GetTrafficEncryptionModeFromStr(multiclusterConfig.TrafficEncryptionMode)
 	if trafficEncryptionMode == config.TrafficEncryptionModeWireGuard {
@@ -156,6 +167,20 @@ func NewMCDefaultRouteController(
 			},
 			DeleteFunc: func(old interface{}) {
 				controller.enqueueClusterInfoImport(old, true)
+			},
+		},
+		resyncPeriod,
+	)
+	controller.clusterAccessInformer.Informer().AddEventHandlerWithResyncPeriod(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(cur interface{}) {
+				controller.enqueueClusterAccess(cur, false)
+			},
+			UpdateFunc: func(old, cur interface{}) {
+				controller.enqueueClusterAccess(cur, false)
+			},
+			DeleteFunc: func(old interface{}) {
+				controller.enqueueClusterAccess(old, true)
 			},
 		},
 		resyncPeriod,
@@ -213,6 +238,36 @@ func (c *MCDefaultRouteController) enqueueClusterInfoImport(obj interface{}, isD
 		}
 	}
 
+	c.queue.Add(workerItemKey)
+}
+
+func (c *MCDefaultRouteController) enqueueClusterAccess(obj interface{}, isDelete bool) {
+	ca, ok := obj.(*mcv1alpha1.ClusterAccess)
+	if !ok {
+		klog.ErrorS(nil, "Received unexpected object for ClusterAccess", "object", obj)
+		return
+	}
+	if !isDelete {
+		c.clusterAccessRestricted = true
+		for _, r := range ca.Spec.AllowedList {
+			if common.IsConnectivityAllowed(r) {
+				if r.Clusters.ClusterIDs == nil {
+					// An empty ClusterSelector selects all clusters in the ClusterSet.
+					// If there is one rule allowing connectivity from all clusters, then
+					// cluster access is no longer restricted.
+					c.clusterAccessRestricted = false
+				} else {
+					allowedClusters := sets.New[string]()
+					for i := range r.Clusters.ClusterIDs {
+						allowedClusters.Insert(r.Clusters.ClusterIDs[i])
+					}
+					c.connectivityAllowedClusters = allowedClusters
+				}
+			}
+		}
+	} else {
+		c.clusterAccessRestricted = false
+	}
 	c.queue.Add(workerItemKey)
 }
 
@@ -513,7 +568,32 @@ func (c *MCDefaultRouteController) addMCFlowsForAllCIImps(activeGW *mcv1alpha1.G
 			return err
 		}
 	}
+	return c.syncClusterAccessFlows(activeGW, allCIImports)
+}
 
+func (c *MCDefaultRouteController) syncClusterAccessFlows(activeGW *mcv1alpha1.Gateway, ciImports []*mcv1alpha1.ClusterInfoImport) error {
+	listGatewayIPs := func(ciImport *mcv1alpha1.ClusterInfoImport) []net.IP {
+		var gatewayIPs []net.IP
+		for _, g := range ciImport.Spec.GatewayInfos {
+			if ip := net.ParseIP(g.GatewayIP); ip != nil {
+				gatewayIPs = append(gatewayIPs, ip)
+			}
+		}
+		return gatewayIPs
+	}
+	if activeGW.Name == c.nodeConfig.Name {
+		var deniedPeerIPs []net.IP
+		if !c.clusterAccessRestricted {
+			return c.ofClient.InstallMulticlusterAccessFlows(false, deniedPeerIPs)
+		}
+		for _, ciImport := range ciImports {
+			if !c.connectivityAllowedClusters.Has(ciImport.Spec.ClusterID) {
+				// install allow rule for this specific cluster peer
+				deniedPeerIPs = append(deniedPeerIPs, listGatewayIPs(ciImport)...)
+			}
+		}
+		return c.ofClient.InstallMulticlusterAccessFlows(true, deniedPeerIPs)
+	}
 	return nil
 }
 

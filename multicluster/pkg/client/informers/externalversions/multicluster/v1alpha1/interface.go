@@ -1,4 +1,4 @@
-// Copyright 2022 Antrea Authors
+// Copyright 2023 Antrea Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// ClusterAccesses returns a ClusterAccessInformer.
+	ClusterAccesses() ClusterAccessInformer
 	// ClusterInfoImports returns a ClusterInfoImportInformer.
 	ClusterInfoImports() ClusterInfoImportInformer
 	// ClusterSets returns a ClusterSetInformer.
@@ -47,6 +49,11 @@ type version struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
+}
+
+// ClusterAccesses returns a ClusterAccessInformer.
+func (v *version) ClusterAccesses() ClusterAccessInformer {
+	return &clusterAccessInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // ClusterInfoImports returns a ClusterInfoImportInformer.
