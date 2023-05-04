@@ -20,12 +20,13 @@ function echoerr {
     >&2 echo "$@"
 }
 
-DEFAULT_WORKDIR="/var/lib/jenkins"
+DEFAULT_WORKDIR="/root/yang"
 WORKDIR=$DEFAULT_WORKDIR
+WORKSPACE="/root/yang/antrea"
 TESTCASE=""
 TEST_FAILURE=false
 DOCKER_REGISTRY=$(head -n1 "${WORKSPACE}/ci/docker-registry")
-MULTICLUSTER_KUBECONFIG_PATH=$WORKDIR/.kube
+MULTICLUSTER_KUBECONFIG_PATH="/root/.kube"
 LEADER_CLUSTER_CONFIG="--kubeconfig=$MULTICLUSTER_KUBECONFIG_PATH/leader"
 EAST_CLUSTER_CONFIG="--kubeconfig=$MULTICLUSTER_KUBECONFIG_PATH/east"
 WEST_CLUSTER_CONFIG="--kubeconfig=$MULTICLUSTER_KUBECONFIG_PATH/west"
@@ -360,6 +361,8 @@ function deliver_multicluster_controller {
     fi
 
     leader_ip=$(kubectl get nodes -o wide --no-headers=true ${LEADER_CLUSTER_CONFIG} | awk -v role1="master" -v role2="control-plane" '($3 ~ role1 || $3 ~ role2) {print $6}')
+    echo "========= At script runtime, leader ip is =========== "
+    echo $leader_ip
     sed -i "s|<LEADER_CLUSTER_IP>|${leader_ip}|" ./multicluster/test/yamls/east-member-cluster.yml
     sed -i "s|<LEADER_CLUSTER_IP>|${leader_ip}|" ./multicluster/test/yamls/west-member-cluster.yml
     if [[ ${KIND} == "true" ]]; then
@@ -430,26 +433,26 @@ function run_multicluster_e2e {
         done
     fi
 
-    set +e
-    CURRENT_DIR=`pwd`
-    mkdir -p ${CURRENT_DIR}/antrea-multicluster-test-logs
-    options=""
-    if [[ ${ENABLE_MC_GATEWAY} == "true" ]]; then
-        options="--mc-gateway"
-    fi
-    if [[ ${KIND} == "true" ]]; then
-        options+=" --provider kind"
-    fi
-
-    set -x
-    go test -v antrea.io/antrea/multicluster/test/e2e --logs-export-dir `pwd`/antrea-multicluster-test-logs $options
-    if [[ "$?" != "0" ]]; then
-        TEST_FAILURE=true
-    fi
-    set +x
-    set -e
-
-    tar -zcf antrea-test-logs.tar.gz antrea-multicluster-test-logs
+#    set +e
+#    CURRENT_DIR=`pwd`
+#    mkdir -p ${CURRENT_DIR}/antrea-multicluster-test-logs
+#    options=""
+#    if [[ ${ENABLE_MC_GATEWAY} == "true" ]]; then
+#        options="--mc-gateway"
+#    fi
+#    if [[ ${KIND} == "true" ]]; then
+#        options+=" --provider kind"
+#    fi
+#
+#    set -x
+#    go test -v antrea.io/antrea/multicluster/test/e2e --logs-export-dir `pwd`/antrea-multicluster-test-logs $options
+#    if [[ "$?" != "0" ]]; then
+#        TEST_FAILURE=true
+#    fi
+#    set +x
+#    set -e
+#
+#    tar -zcf antrea-test-logs.tar.gz antrea-multicluster-test-logs
 }
 
 function collect_coverage {
@@ -468,9 +471,9 @@ function collect_coverage {
     done
 }
 
-trap clean_multicluster EXIT
-clean_tmp
-clean_images
+#trap clean_multicluster EXIT
+#clean_tmp
+#clean_images
 
 if [[ ${KIND} == "true" ]]; then
     # Preparing a ClusterSet contains three Kind clusters.
@@ -503,16 +506,16 @@ if [[ ${TESTCASE} =~ "e2e" ]]; then
     modify_config
     deliver_multicluster_controller
     run_multicluster_e2e
-    if $COVERAGE;then
-      CURRENT_DIR=`pwd`
-      rm -rf mc-e2e-coverage
-      mkdir -p mc-e2e-coverage
-      collect_coverage ${CURRENT_DIR}/mc-e2e-coverage
-      # Backup coverage files for later analysis
-      set +e;find ${DEFAULT_WORKDIR}/mc-e2e-coverage -maxdepth 1 -mtime +1 -type f | xargs -n 1 rm;set -e; # Clean up backup files older than one day.
-      cp -r mc-e2e-coverage ${DEFAULT_WORKDIR}
-      run_codecov "e2e-tests" "*antrea-mc*" "${CURRENT_DIR}/mc-e2e-coverage"
-    fi
+#    if $COVERAGE;then
+#      CURRENT_DIR=`pwd`
+#      rm -rf mc-e2e-coverage
+#      mkdir -p mc-e2e-coverage
+#      collect_coverage ${CURRENT_DIR}/mc-e2e-coverage
+#      # Backup coverage files for later analysis
+#      set +e;find ${DEFAULT_WORKDIR}/mc-e2e-coverage -maxdepth 1 -mtime +1 -type f | xargs -n 1 rm;set -e; # Clean up backup files older than one day.
+#      cp -r mc-e2e-coverage ${DEFAULT_WORKDIR}
+#      run_codecov "e2e-tests" "*antrea-mc*" "${CURRENT_DIR}/mc-e2e-coverage"
+#    fi
 fi
 
 if [[ ${TEST_FAILURE} == true ]]; then

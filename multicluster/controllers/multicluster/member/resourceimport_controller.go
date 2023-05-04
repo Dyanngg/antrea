@@ -399,6 +399,7 @@ func (r *ResourceImportReconciler) shouldSkipClusterInfoImport(clusterID string)
 }
 
 func (r *ResourceImportReconciler) clusterImportControlMapFunc(cic client.Object) []reconcile.Request {
+	klog.Infof("Handling a new CIC event!!!")
 	cicList := &multiclusterv1alpha1.ClusterImportControlList{}
 	mcNamespace := cic.GetNamespace()
 	err := r.remoteCommonArea.List(context.TODO(), cicList, &client.ListOptions{Namespace: mcNamespace})
@@ -409,7 +410,9 @@ func (r *ResourceImportReconciler) clusterImportControlMapFunc(cic client.Object
 	connectivityAllowedClusters := sets.New[string]()
 out:
 	for _, cic := range cicList.Items {
+		klog.Infof("Examining CIC %v", cic.Name)
 		if !common.StringExistsInSlice(cic.Spec.AppliedToClusters, r.localClusterID) {
+			klog.Infof("CIC appliedTo cluster does not match!")
 			continue
 		}
 		clusterImportRestricted = true
@@ -423,6 +426,7 @@ out:
 					break out
 				}
 				for i := range rule.Clusters.ClusterIDs {
+					klog.Infof("An actual restrictive rule!")
 					connectivityAllowedClusters.Insert(rule.Clusters.ClusterIDs[i])
 				}
 			}
@@ -435,6 +439,7 @@ out:
 		r.connectivityAllowedClusters = connectivityAllowedClusters
 	}
 	r.clusterImportControlMutex.Unlock()
+	klog.Infof("ClusterAccessRestricted?: %v, allowedClusters: %v", r.clusterImportRestricted, r.connectivityAllowedClusters)
 	var requests []reconcile.Request
 	if resyncClusterInfoImport {
 		resImportList := &multiclusterv1alpha1.ResourceImportList{}
@@ -444,6 +449,7 @@ out:
 		})
 		requests = make([]reconcile.Request, len(resImportList.Items))
 		for i, resImp := range resImportList.Items {
+			klog.Infof("Enqueuing resImport: %s/%s", resImp.GetName(), resImp.GetNamespace())
 			requests[i] = reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      resImp.GetName(),

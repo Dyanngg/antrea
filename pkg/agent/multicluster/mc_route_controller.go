@@ -431,11 +431,11 @@ func (c *MCDefaultRouteController) syncMCFlows() error {
 		return err
 	}
 	if activeGW == nil && c.installedActiveGW == nil {
-		klog.V(2).InfoS("No active Gateway is found")
+		klog.InfoS("No active Gateway is found")
 		return nil
 	}
 
-	klog.V(2).InfoS("Installed Gateway", "gateway", klog.KObj(c.installedActiveGW))
+	klog.InfoS("Installed Gateway", "gateway", klog.KObj(c.installedActiveGW))
 	if activeGW != nil && c.installedActiveGW != nil && activeGW.Name == c.installedActiveGW.Name {
 		// Active Gateway name doesn't change but still do a full flow sync
 		// for any Gateway Spec or ClusterInfoImport changes.
