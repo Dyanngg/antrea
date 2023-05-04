@@ -435,6 +435,7 @@ func (c *client) modifyFlows(cache *flowCategoryCache, flowCacheKey string, flow
 	fCache := flowMessageCache{}
 	var err error
 	if !ok {
+		klog.Infof("Openflow is adding flows for a new cache key")
 		messages := make([]*openflow15.FlowMod, 0, len(flows))
 		for _, flow := range flows {
 			msg := getFlowModMessage(flow, binding.AddMessage)
@@ -443,6 +444,7 @@ func (c *client) modifyFlows(cache *flowCategoryCache, flowCacheKey string, flow
 		}
 		err = c.ofEntryOperations.AddAll(messages)
 	} else {
+		klog.Infof("Openflow is moding flows for an old cache key")
 		var adds, mods, dels []*openflow15.FlowMod
 		oldFlowCache := oldFlowCacheI.(flowMessageCache)
 		for _, flow := range flows {
@@ -450,10 +452,14 @@ func (c *client) modifyFlows(cache *flowCategoryCache, flowCacheKey string, flow
 			var msg *openflow15.FlowMod
 			if _, ok := oldFlowCache[matchString]; ok {
 				msg = getFlowModMessage(flow, binding.ModifyMessage)
-				adds = append(adds, msg)
+				// TODO: this might be a bug?
+				mods = append(mods, msg)
+				klog.Infof("In the mods there is a msg priority-%v, match-%v", msg.Priority, msg.Match)
 			} else {
 				msg = getFlowModMessage(flow, binding.AddMessage)
-				mods = append(mods, msg)
+				// TODO: this might be a bug?
+				adds = append(adds, msg)
+				klog.Infof("In the adds there is a msg priority-%v, match-%v", msg.Priority, msg.Match)
 			}
 			fCache[matchString] = msg
 		}
@@ -1468,14 +1474,19 @@ func (c *client) InstallMulticlusterNodeFlows(clusterID string,
 func (c *client) InstallMulticlusterAccessFlows(accessRestricted bool, deniedPeers []net.IP) error {
 	c.replayMutex.RLock()
 	defer c.replayMutex.RUnlock()
+
 	var flows []binding.Flow
 	if accessRestricted {
 		//flows = append(flows, c.featureMulticluster.clusterAccessIsolationFlow())
 		for _, ip := range deniedPeers {
-			flows = append(flows, c.featureMulticluster.remoteGatewayDropFlow(ip))
+			ipFlow := c.featureMulticluster.remoteGatewayDropFlow(ip)
+			flows = append(flows, ipFlow)
+			klog.Infof("Adding a new flow with matchKey %s", ipFlow.MatchString())
 		}
 	}
-	return c.modifyFlows(c.featureMulticluster.cachedFlows, "clusteraccess", flows)
+	err := c.modifyFlows(c.featureMulticluster.cachedFlows, "clusteraccess", flows)
+	klog.Infof("The modifyFlows operation status: %v", err)
+	return err
 }
 
 // InstallMulticlusterGatewayFlows installs flows to handle cross-cluster packets between Gateways.

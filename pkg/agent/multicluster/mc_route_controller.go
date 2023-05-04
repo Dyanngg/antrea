@@ -247,6 +247,7 @@ func (c *MCDefaultRouteController) enqueueClusterAccess(obj interface{}, isDelet
 		klog.ErrorS(nil, "Received unexpected object for ClusterAccess", "object", obj)
 		return
 	}
+	klog.Info("Received new ClusterAccess object to process!!")
 	if !isDelete {
 		c.clusterAccessRestricted = true
 		for _, r := range ca.Spec.AllowedList {
@@ -255,6 +256,7 @@ func (c *MCDefaultRouteController) enqueueClusterAccess(obj interface{}, isDelet
 					// An empty ClusterSelector selects all clusters in the ClusterSet.
 					// If there is one rule allowing connectivity from all clusters, then
 					// cluster access is no longer restricted.
+					klog.Info("Cluster access is not restricted due to allow rule selecting all clusters")
 					c.clusterAccessRestricted = false
 				} else {
 					allowedClusters := sets.New[string]()
@@ -266,8 +268,10 @@ func (c *MCDefaultRouteController) enqueueClusterAccess(obj interface{}, isDelet
 			}
 		}
 	} else {
+		klog.Info("Cluster access is not restricted due to ClusterAccess object being deleted")
 		c.clusterAccessRestricted = false
 	}
+	klog.Info("Enqueuing ClusterAccess")
 	c.queue.Add(workerItemKey)
 }
 
@@ -486,15 +490,16 @@ func (c *MCDefaultRouteController) syncMCFlows() error {
 		return err
 	}
 	if activeGW == nil && c.installedActiveGW == nil {
-		klog.V(2).InfoS("No active Gateway is found")
+		klog.InfoS("No active Gateway is found")
 		return nil
 	}
 
-	klog.V(2).InfoS("Installed Gateway", "gateway", klog.KObj(c.installedActiveGW))
+	klog.InfoS("Installed Gateway", "gateway", klog.KObj(c.installedActiveGW))
 	if activeGW != nil && c.installedActiveGW != nil && activeGW.Name == c.installedActiveGW.Name {
 		// Active Gateway name doesn't change but still do a full flow sync
 		// for any Gateway Spec or ClusterInfoImport changes.
 		if err := c.syncMCFlowsForAllCIImps(activeGW); err != nil {
+			klog.Errorf("Error in syncing flows! err=%v", err)
 			return err
 		}
 		c.installedActiveGW = activeGW
@@ -539,7 +544,8 @@ func (c *MCDefaultRouteController) syncMCFlowsForAllCIImps(activeGW *mcv1alpha1.
 			return err
 		}
 	}
-	return nil
+	klog.Info("Syncing cluster access flows in syncMCFlowsForAllCIImps!")
+	return c.syncClusterAccessFlows(activeGW, desiredCIImports)
 }
 
 func (c *MCDefaultRouteController) checkGatewayIPChange(activeGW *mcv1alpha1.Gateway) bool {
@@ -568,27 +574,30 @@ func (c *MCDefaultRouteController) addMCFlowsForAllCIImps(activeGW *mcv1alpha1.G
 			return err
 		}
 	}
+	klog.Info("Syncing cluster access flows in addMCFlowsForAllCIImps!")
 	return c.syncClusterAccessFlows(activeGW, allCIImports)
 }
 
 func (c *MCDefaultRouteController) syncClusterAccessFlows(activeGW *mcv1alpha1.Gateway, ciImports []*mcv1alpha1.ClusterInfoImport) error {
-	listGatewayIPs := func(ciImport *mcv1alpha1.ClusterInfoImport) []net.IP {
-		var gatewayIPs []net.IP
-		for _, g := range ciImport.Spec.GatewayInfos {
-			if ip := net.ParseIP(g.GatewayIP); ip != nil {
-				gatewayIPs = append(gatewayIPs, ip)
-			}
-		}
-		return gatewayIPs
-	}
 	if activeGW.Name == c.nodeConfig.Name {
+		listGatewayIPs := func(ciImport *mcv1alpha1.ClusterInfoImport) []net.IP {
+			var gatewayIPs []net.IP
+			for _, g := range ciImport.Spec.GatewayInfos {
+				if ip := net.ParseIP(g.GatewayIP); ip != nil {
+					gatewayIPs = append(gatewayIPs, ip)
+				}
+			}
+			return gatewayIPs
+		}
 		var deniedPeerIPs []net.IP
 		if !c.clusterAccessRestricted {
+			klog.Infof("Setting the multicluster access flows to empty list")
 			return c.ofClient.InstallMulticlusterAccessFlows(false, deniedPeerIPs)
 		}
 		for _, ciImport := range ciImports {
 			if !c.connectivityAllowedClusters.Has(ciImport.Spec.ClusterID) {
-				// install allow rule for this specific cluster peer
+				// install drop rule for this specific cluster peer
+				klog.Infof("Adding the peer IP of remote gateway %v", ciImport.Spec.GatewayInfos)
 				deniedPeerIPs = append(deniedPeerIPs, listGatewayIPs(ciImport)...)
 			}
 		}
