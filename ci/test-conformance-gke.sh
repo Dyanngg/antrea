@@ -176,9 +176,12 @@ function setup_gke() {
 
     mkdir -p ${KUBECONFIG_PATH}
     KUBECONFIG=${KUBECONFIG_PATH}/kubeconfig ${GCLOUD_PATH} container clusters get-credentials ${CLUSTER} --zone ${GKE_ZONE}
+    export KUBECONFIG=${KUBECONFIG_PATH}/kubeconfig
+    echo "====== Looking at GKE kubeconfig ======="
+    cat $KUBECONFIG
 
     sleep 10
-    if [[ $(kubectl get nodes) ]]; then
+    if [[ $(/home/ubuntu/google-cloud-sdk/bin/kubectl get nodes) ]]; then
         echo "=== GKE cluster setup succeeded ==="
     else
         echo "=== GKE cluster is not configured correctly! ==="
@@ -216,7 +219,7 @@ function deliver_antrea_to_gke() {
     DOCKER_IMG_NAME="antrea/antrea-ubuntu"
     docker save -o ${antrea_image}.tar ${DOCKER_IMG_NAME}:${DOCKER_IMG_VERSION}
 
-    node_names=$(kubectl get nodes -o wide --no-headers=true | awk '{print $1}')
+    node_names=$(/home/ubuntu/google-cloud-sdk/bin/kubectl get nodes -o wide --no-headers=true | awk '{print $1}')
     for node_name in ${node_names}; do
         ${GCLOUD_PATH} compute scp ${antrea_image}.tar ubuntu@${node_name}:~ --zone ${GKE_ZONE}
         ${GCLOUD_PATH} compute ssh ubuntu@${node_name} --command="sudo ctr -n=k8s.io images import ~/${antrea_image}.tar ; sudo ctr -n=k8s.io images tag docker.io/${DOCKER_IMG_NAME}:${DOCKER_IMG_VERSION} docker.io/${DOCKER_IMG_NAME}:latest" --zone ${GKE_ZONE}
@@ -226,25 +229,25 @@ function deliver_antrea_to_gke() {
     echo "=== Configuring Antrea for cluster ==="
     if [[ -n ${SVC_ACCOUNT_NAME+x} ]]; then
         ${GCLOUD_PATH} projects add-iam-policy-binding ${GKE_PROJECT} --member serviceAccount:${SVC_ACCOUNT_NAME} --role roles/container.admin
-        kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user ${SVC_ACCOUNT_NAME}
+        /home/ubuntu/google-cloud-sdk/bin/kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user ${SVC_ACCOUNT_NAME}
     elif [[ -n ${USER_EMAIL+x} ]]; then
         ${GCLOUD_PATH} projects add-iam-policy-binding ${GKE_PROJECT} --member user:${USER_EMAIL} --role roles/container.admin
-        kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user ${USER_EMAIL}
+        /home/ubuntu/google-cloud-sdk/bin/kubectl create clusterrolebinding cluster-admin-binding --clusterrole cluster-admin --user ${USER_EMAIL}
     else
         echo "Neither service account or user email info is set, cannot create cluster-admin-binding!"
         echo "Please refer to --help for more information."
         exit 1
     fi
 
-    kubectl apply -f ${GIT_CHECKOUT_DIR}/build/yamls/antrea-gke-node-init.yml
-    kubectl apply -f ${GIT_CHECKOUT_DIR}/build/yamls/antrea-gke.yml
-    kubectl rollout status --timeout=2m deployment.apps/antrea-controller -n kube-system
-    kubectl rollout status --timeout=2m daemonset/antrea-agent -n kube-system
+    /home/ubuntu/google-cloud-sdk/bin/kubectl apply -f ${GIT_CHECKOUT_DIR}/build/yamls/antrea-gke-node-init.yml
+    /home/ubuntu/google-cloud-sdk/bin/kubectl apply -f ${GIT_CHECKOUT_DIR}/build/yamls/antrea-gke.yml
+    /home/ubuntu/google-cloud-sdk/bin/kubectl rollout status --timeout=2m deployment.apps/antrea-controller -n kube-system
+    /home/ubuntu/google-cloud-sdk/bin/kubectl rollout status --timeout=2m daemonset/antrea-agent -n kube-system
 
     # Restart all Pods in all Namespaces (kube-system, etc) so they can be managed by Antrea.
-    kubectl delete pods -n kube-system $(kubectl get pods -n kube-system -o custom-columns=NAME:.metadata.name,HOSTNETWORK:.spec.hostNetwork \
+    /home/ubuntu/google-cloud-sdk/bin/kubectl delete pods -n kube-system $(/home/ubuntu/google-cloud-sdk/bin/kubectl get pods -n kube-system -o custom-columns=NAME:.metadata.name,HOSTNETWORK:.spec.hostNetwork \
         --no-headers=true | grep '<none>' | awk '{ print $1 }')
-    kubectl rollout status --timeout=2m deployment.apps/kube-dns -n kube-system
+    /home/ubuntu/google-cloud-sdk/bin/kubectl rollout status --timeout=2m deployment.apps/kube-dns -n kube-system
     # wait for other pods in the kube-system namespace to become ready
     sleep 5
 
@@ -281,8 +284,8 @@ function run_conformance() {
     ${GCLOUD_PATH} compute firewall-rules delete allow-nodeport
 
     echo "=== Cleanup Antrea Installation ==="
-    kubectl delete -f ${GIT_CHECKOUT_DIR}/build/yamls/antrea-gke.yml --ignore-not-found=true || true
-    kubectl delete -f ${GIT_CHECKOUT_DIR}/build/yamls/antrea-gke-node-init.yml --ignore-not-found=true || true
+    /home/ubuntu/google-cloud-sdk/bin/kubectl delete -f ${GIT_CHECKOUT_DIR}/build/yamls/antrea-gke.yml --ignore-not-found=true || true
+    /home/ubuntu/google-cloud-sdk/bin/kubectl delete -f ${GIT_CHECKOUT_DIR}/build/yamls/antrea-gke-node-init.yml --ignore-not-found=true || true
 }
 
 function cleanup_cluster() {
