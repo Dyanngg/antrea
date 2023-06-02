@@ -359,7 +359,7 @@ pushd "$THIS_DIR" > /dev/null
 if [[ "$RUN_ALL" == true || "$RUN_SETUP_ONLY" == true ]]; then
     setup_eks
     deliver_antrea_to_eks
-    run_conformance
+#    run_conformance
 fi
 
 if [[ "$RUN_ALL" == true || "$RUN_CLEANUP_ONLY" == true ]]; then

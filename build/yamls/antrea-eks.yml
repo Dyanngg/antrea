@@ -3022,7 +3022,7 @@ data:
     #  Multicast: false
 
     # Enable Antrea Multi-cluster features.
-    #  Multicluster: false
+      Multicluster: true
 
     # Enable support for provisioning secondary network interfaces for Pods (using
     # Pod annotations). At the moment, Antrea can only create secondary network
@@ -3281,7 +3281,7 @@ data:
     multicluster:
     # Enable Antrea Multi-cluster Gateway to support cross-cluster traffic.
     # This feature is supported only with encap mode.
-      enableGateway: false
+      enableGateway: true
     # The Namespace where Antrea Multi-cluster Controller is running.
     # The default is antrea-agent's Namespace.
       namespace: ""
@@ -3289,7 +3289,7 @@ data:
     # Multi-cluster Gateway must be enabled to enable StretchedNetworkPolicy.
       enableStretchedNetworkPolicy: false
     # Enable Pod to Pod connectivity.
-      enablePodToPodConnectivity: false
+      enablePodToPodConnectivity: true
     # Determines how cross-cluster traffic is encrypted.
     # It has the following options:
     # - none (default):  Cross-cluster traffic will not be encrypted.
@@ -3370,7 +3370,7 @@ data:
     #  SupportBundleCollection: false
 
     # Enable Antrea Multi-cluster features.
-    #  Multicluster: false
+      Multicluster: true
 
     # Enable users to protect their applications by specifying how they are allowed to communicate with others, taking
     # into account application context.
@@ -3438,7 +3438,7 @@ data:
 
     multicluster:
       # Enable Multi-cluster NetworkPolicy.
-      enableStretchedNetworkPolicy: false
+      enableStretchedNetworkPolicy: true
 ---
 # Source: antrea/templates/crds/group.yaml
 apiVersion: apiextensions.k8s.io/v1
