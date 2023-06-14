@@ -18,6 +18,8 @@ import (
 	"encoding/hex"
 
 	corev1 "k8s.io/api/core/v1"
+
+	mcv1alpha1 "antrea.io/antrea/multicluster/apis/multicluster/v1alpha1"
 )
 
 const labelIdentityHashLength = 16
@@ -86,4 +88,13 @@ func HashLabelIdentity(l string) string {
 
 func IsMulticlusterService(service *corev1.Service) bool {
 	return service.Annotations[AntreaMCServiceAnnotation] == "true"
+}
+
+func IsConnectivityAllowed(rule mcv1alpha1.ClusterImportControlRule) bool {
+	for _, r := range rule.Resources {
+		if r == mcv1alpha1.ResourceTypeConnectivity {
+			return true
+		}
+	}
+	return false
 }

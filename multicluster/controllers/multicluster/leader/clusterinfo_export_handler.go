@@ -33,10 +33,20 @@ import (
 )
 
 func (r *ResourceExportReconciler) handleClusterInfo(ctx context.Context, req ctrl.Request, resExport mcsv1alpha1.ResourceExport) (ctrl.Result, error) {
+	clusterInfoResImpLabels := map[string]string{
+		constants.SourceKind: constants.ClusterInfoKind,
+	}
 	resImport := &mcsv1alpha1.ResourceImport{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
 			Namespace: req.Namespace,
+			Labels:    clusterInfoResImpLabels,
+		},
+		Spec: mcsv1alpha1.ResourceImportSpec{
+			Kind:        constants.ClusterInfoKind,
+			Name:        resExport.Name,
+			Namespace:   resExport.Namespace,
+			ClusterInfo: resExport.Spec.ClusterInfo,
 		},
 	}
 
@@ -50,37 +60,33 @@ func (r *ResourceExportReconciler) handleClusterInfo(ctx context.Context, req ct
 		}
 		return ctrl.Result{}, nil
 	}
-
-	resImport.Spec = mcsv1alpha1.ResourceImportSpec{
-		Kind:      constants.ClusterInfoKind,
-		Name:      resExport.Name,
-		Namespace: resExport.Namespace,
-	}
+	existingResImp := &mcsv1alpha1.ResourceImport{}
 	resImportName := types.NamespacedName{
 		Name:      req.Name,
 		Namespace: req.Namespace,
 	}
 
 	var err error
-	if err = r.Client.Get(ctx, resImportName, resImport); err != nil {
+	if err = r.Client.Get(ctx, resImportName, existingResImp); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 		// Create a new ClusterInfo of ResourceImport
-		resImport.Spec.ClusterInfo = resExport.Spec.ClusterInfo
 		if err = r.Client.Create(ctx, resImport, &client.CreateOptions{}); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
 	}
-	if reflect.DeepEqual(resImport.Spec.ClusterInfo, resExport.Spec.ClusterInfo) {
+	_, hasSourceKindLabel := existingResImp.Labels[constants.SourceKind]
+	if reflect.DeepEqual(existingResImp.Spec.ClusterInfo, resExport.Spec.ClusterInfo) && hasSourceKindLabel {
 		klog.V(2).InfoS("No data change from ResourceExport, skip reconciling", "resourceexport", klog.KObj(&resExport))
 		return ctrl.Result{}, nil
 	}
 	// Update an existing ClusterInfo of ResourceImport
-	resImport.Spec.ClusterInfo = resExport.Spec.ClusterInfo
-	klog.InfoS("Updating ResourceImport", "resourceimport", klog.KObj(&resExport))
-	if err = r.Client.Update(ctx, resImport, &client.UpdateOptions{}); err != nil {
+	existingResImp.Spec.ClusterInfo = resExport.Spec.ClusterInfo
+	existingResImp.Labels = clusterInfoResImpLabels
+	klog.InfoS("Updating ResourceImport", "resourceimport", klog.KObj(existingResImp))
+	if err = r.Client.Update(ctx, existingResImp, &client.UpdateOptions{}); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil

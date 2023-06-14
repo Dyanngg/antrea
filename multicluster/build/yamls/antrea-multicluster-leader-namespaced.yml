@@ -171,6 +171,17 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - multicluster.crd.antrea.io
+  resources:
+  - clusterimportcontrols
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -240,6 +251,14 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - multicluster.crd.antrea.io
+  resources:
+  - clusterimportcontrols
+  verbs:
+  - get
+  - list
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

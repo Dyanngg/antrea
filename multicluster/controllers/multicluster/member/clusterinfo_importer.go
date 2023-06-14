@@ -44,6 +44,13 @@ func (r *ResourceImportReconciler) handleResImpUpdateForClusterInfo(ctx context.
 		klog.V(2).InfoS("Skip reconciling ResourceImport for ClusterInfo since it's from local cluster", "resourceimport", req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
+	if r.shouldSkipClusterInfoImport(clusterInfo.ClusterID) {
+		key, _ := resImportIndexerKeyFunc(*resImp)
+		if _, exists, _ := r.installedResImports.GetByKey(key); exists {
+			return r.handleResImpDeleteForClusterInfo(ctx, req, resImp)
+		}
+		return ctrl.Result{}, nil
+	}
 
 	// Create or update ClusterInfoImport
 	clusterInfoImport, clusterInfoImportName := newClusterInfoImport(req.Name, r.namespace)

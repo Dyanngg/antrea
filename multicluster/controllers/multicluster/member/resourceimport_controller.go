@@ -20,19 +20,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	k8smcsv1alpha1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 
 	"antrea.io/antrea/multicluster/apis/multicluster/constants"
@@ -59,12 +65,15 @@ func resImportIndexerKeyFunc(obj interface{}) (string, error) {
 // ResourceImportReconciler reconciles a ResourceImport object in the member cluster.
 type ResourceImportReconciler struct {
 	client.Client
-	Scheme              *runtime.Scheme
-	localClusterClient  client.Client
-	localClusterID      string
-	namespace           string
-	remoteCommonArea    commonarea.RemoteCommonArea
-	installedResImports cache.Indexer
+	Scheme                      *runtime.Scheme
+	localClusterClient          client.Client
+	localClusterID              string
+	namespace                   string
+	remoteCommonArea            commonarea.RemoteCommonArea
+	installedResImports         cache.Indexer
+	clusterImportControlMutex   sync.RWMutex
+	clusterImportRestricted     bool
+	connectivityAllowedClusters sets.Set[string]
 	// Saved Manager to indicate SetupWithManager() is done or not.
 	manager ctrl.Manager
 }
@@ -81,6 +90,7 @@ func newResourceImportReconciler(client client.Client, scheme *runtime.Scheme, l
 		installedResImports: cache.NewIndexer(resImportIndexerKeyFunc, cache.Indexers{
 			resImportIndexer: resImportIndexerFunc,
 		}),
+		connectivityAllowedClusters: sets.New[string](),
 	}
 }
 
@@ -371,6 +381,80 @@ func getMCServiceImport(resImp *multiclusterv1alpha1.ResourceImport) *k8smcsv1al
 	return svcImp
 }
 
+func getClusterInfoKindResourceImportSelector() labels.Selector {
+	labelSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			constants.SourceKind: constants.ClusterInfoKind,
+		},
+	}
+	selector, _ := metav1.LabelSelectorAsSelector(&labelSelector)
+	return selector
+}
+
+func (r *ResourceImportReconciler) shouldSkipClusterInfoImport(clusterID string) bool {
+	r.clusterImportControlMutex.RLock()
+	defer r.clusterImportControlMutex.RUnlock()
+
+	return r.clusterImportRestricted && !r.connectivityAllowedClusters.Has(clusterID)
+}
+
+func (r *ResourceImportReconciler) clusterImportControlMapFunc(cic client.Object) []reconcile.Request {
+	cicList := &multiclusterv1alpha1.ClusterImportControlList{}
+	mcNamespace := cic.GetNamespace()
+	err := r.remoteCommonArea.List(context.TODO(), cicList, &client.ListOptions{Namespace: mcNamespace})
+	if err != nil {
+		klog.ErrorS(err, "Listing CIC failed")
+	}
+	clusterImportRestricted := false
+	connectivityAllowedClusters := sets.New[string]()
+out:
+	for _, cic := range cicList.Items {
+		if !common.StringExistsInSlice(cic.Spec.AppliedToClusters, r.localClusterID) {
+			continue
+		}
+		clusterImportRestricted = true
+		for _, rule := range cic.Spec.AllowedList {
+			if common.IsConnectivityAllowed(rule) {
+				if rule.Clusters.ClusterIDs == nil {
+					// An empty ClusterSelector selects all clusters in the ClusterSet.
+					// If there is one rule allowing connectivity from all clusters, then
+					// cluster access is no longer restricted.
+					clusterImportRestricted = false
+					break out
+				}
+				for i := range rule.Clusters.ClusterIDs {
+					connectivityAllowedClusters.Insert(rule.Clusters.ClusterIDs[i])
+				}
+			}
+		}
+	}
+	r.clusterImportControlMutex.Lock()
+	resyncClusterInfoImport := r.clusterImportRestricted != clusterImportRestricted || !r.connectivityAllowedClusters.Equal(connectivityAllowedClusters)
+	if resyncClusterInfoImport {
+		r.clusterImportRestricted = clusterImportRestricted
+		r.connectivityAllowedClusters = connectivityAllowedClusters
+	}
+	r.clusterImportControlMutex.Unlock()
+	var requests []reconcile.Request
+	if resyncClusterInfoImport {
+		resImportList := &multiclusterv1alpha1.ResourceImportList{}
+		r.remoteCommonArea.List(context.TODO(), resImportList, &client.ListOptions{
+			Namespace:     mcNamespace,
+			LabelSelector: getClusterInfoKindResourceImportSelector(),
+		})
+		requests = make([]reconcile.Request, len(resImportList.Items))
+		for i, resImp := range resImportList.Items {
+			requests[i] = reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      resImp.GetName(),
+					Namespace: resImp.GetNamespace(),
+				},
+			}
+		}
+	}
+	return requests
+}
+
 // SetupWithManager sets up the controller with the ClusterManager
 // which will set up controllers for resources that need to be monitored
 // in the remoteCommonArea.
@@ -388,13 +472,15 @@ func (r *ResourceImportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		if resImport, ok := object.(*multiclusterv1alpha1.ResourceImport); ok {
 			return resImport.Spec.Kind != constants.LabelIdentityKind
 		}
-		return false
+		return true
 	}
 	labelIdentityResImportPredicate := predicate.NewPredicateFuncs(labelIdentityResImportFilter)
 	instance := predicate.And(generationPredicate, labelIdentityResImportPredicate)
 	err := ctrl.NewControllerManagedBy(mgr).
 		For(&multiclusterv1alpha1.ResourceImport{}).
 		WithEventFilter(instance).
+		Watches(&source.Kind{Type: &multiclusterv1alpha1.ClusterImportControl{}},
+			handler.EnqueueRequestsFromMapFunc(r.clusterImportControlMapFunc)).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: common.DefaultWorkerCount,
 		}).

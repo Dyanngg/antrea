@@ -66,3 +66,11 @@ rules:
       - get
       - patch
       - update
+  - apiGroups:
+      - multicluster.crd.antrea.io
+    resources:
+      - clusterimportcontrols
+    verbs:
+      - get
+      - list
+      - watch
