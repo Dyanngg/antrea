@@ -12,10 +12,17 @@ rules:
       - services
       - namespaces
       - configmaps
+      - endpoints
     verbs:
       - get
       - watch
       - list
+  - apiGroups:
+      - ""
+    resources:
+      - pods/exec
+    verbs:
+      - get
   - apiGroups:
       - ""
     resources:

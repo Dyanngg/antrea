@@ -1,0 +1,15 @@
+#      modules: Modules to be imported in python provider
+#      classes: Classes to be imported in python provider
+#
+# Note: Python file that includes validator class(es) must be prior to
+#       the runbook descriptor that refers the certain validator class(es).
+#
+# This manifest lists runbooks that run on SHA Agent on Northstar.
+%YAML 1.2
+---
+- !Import
+  file: antrea_np.yml
+  type: runbook
+- !Import
+  file: antrea_np.py
+  type: python

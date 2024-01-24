@@ -140,6 +140,14 @@ spec:
               mountPath: /var/run/antrea/antrea-controller-tls
             - name: host-var-log-antrea
               mountPath: /var/log/antrea
+        - name: antrea-ods
+          image: "antrea/antrea-ods:latest"
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 200m
+          command: [ "sleep" ]
+          args: [ "3600" ]
       volumes:
         - name: antrea-config
           configMap:

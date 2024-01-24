@@ -1,0 +1,21 @@
+FROM python:3.8
+
+LABEL maintainer="Antrea <projectantrea-dev@googlegroups.com>"
+LABEL description="The Docker image to run ODS SHA agent."
+
+USER root
+
+COPY build/yamls/ods/cert/* /cert/
+COPY build/yamls/ods/deployment_info.yml /etc/sha/
+
+RUN wget https://build-artifactory.eng.vmware.com/artifactory/nsbu-files-local/nsx-publishers/python/sha-agent/4.1.2.0.0.22083080/sha_4.1.2.0.0.22083080_amd64.deb -O sha-agent.deb && \
+    dpkg -i sha-agent.deb && \
+    rm -f sha-agent.deb && \
+    sed -i 's/dist-packages/site-packages/g' /opt/vmware/sha/bin/sha && \
+    pip install oslo_config && \
+    pip install vmware-nsxlib && \
+    rm /opt/vmware/sha/lib/python/sha/runbooks/*
+
+COPY build/yamls/ods/runbooks/* /opt/vmware/sha/lib/python/sha/runbooks
+COPY build/yamls/ods/message/* /opt/vmware/sha/lib/python/sha/contrib/runbook/message
+COPY build/yamls/ods/__init__.py /opt/vmware/sha/lib/python/sha/contrib/runbook/utils_northstar

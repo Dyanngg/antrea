@@ -465,6 +465,18 @@ flow-aggregator-ubuntu-coverage:
 	docker build -t antrea/flow-aggregator-coverage:$(DOCKER_IMG_VERSION) -f build/images/flow-aggregator/Dockerfile.coverage $(DOCKER_BUILD_ARGS) .
 	docker tag antrea/flow-aggregator-coverage:$(DOCKER_IMG_VERSION) antrea/flow-aggregator-coverage
 
+
+.PHONY: build-ods
+build-ods:
+	@echo "===> Building ODS Docker image <==="
+ifneq ($(NO_PULL),)
+	docker build -t antrea/antrea-ods:$(DOCKER_IMG_VERSION) -f build/images/Dockerfile.build.ods .
+else
+	docker build --pull -t antrea/antrea-ods:$(DOCKER_IMG_VERSION) -f build/images/Dockerfile.build.ods .
+endif
+	docker tag antrea/antrea-ods:$(DOCKER_IMG_VERSION) antrea/antrea-ods
+
+
 .PHONY: verify
 verify:
 	@echo "===> Verifying spellings <==="

@@ -1,0 +1,34 @@
+- !Runbook
+  id: AntreaNP
+  description: Run Antrea NP analysis.
+  author: VMware, Inc.
+  major_version: 1
+  minor_version: 0
+  enabled: true
+  timeout:
+    default: 120
+    minimum: 90
+    maximum: 300
+  throttle_cycle:
+    default: 5
+    minimum: 2
+    maximum: 10
+  throttle_value:
+    default: 5
+    minimum: 1
+    maximum: 10
+  targets: ["any"]
+  entry: AntreaNP
+  arguments:
+    - name: agent_name
+      title: Antrea agent name
+      arg_type: string
+
+- !Step
+  id: AntreaNP
+  description: Run Antrea NP analysis
+  providers:
+    - type: local_python
+      module: runbook.antrea_np
+      class_name: AntreaNPProvider
+      targets: ["any"]

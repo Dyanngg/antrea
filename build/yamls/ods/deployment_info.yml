@@ -1,0 +1,10 @@
+outer_collector:
+  tsdb:
+    # Access metrics instance via servicename.namespace
+    endpoint: metrics-manager.nsx-system.svc.cluster.local:5129
+manager_namespace: nsx-system
+northstar_service_type: METRICS
+org_id:
+instance_id:
+manager_fqdn: metrics-manager.nsx-system.svc.cluster.local:5129
+manager_type: NTM
