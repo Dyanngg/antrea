@@ -8,8 +8,8 @@
 %YAML 1.2
 ---
 - !Import
-  file: antrea_np.yml
+  file: antrea_pod_connectivity.yml
   type: runbook
 - !Import
-  file: antrea_np.py
+  file: antrea_pod_connectivity.py
   type: python

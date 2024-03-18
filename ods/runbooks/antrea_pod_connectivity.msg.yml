@@ -1,0 +1,87 @@
+# Copyright (C) 2024 VMware, Inc. All rights reserved.
+# -- VMware Confidential
+
+- !Message
+  key: failed_to_retrieve_antrea_controller_pod
+  type:
+    - result
+  message: |
+    Failed to retrieve Antrea controller Pod information.
+
+- !Message
+  key: check_antrea_deployment
+  type:
+    - rcmd
+  message: |
+    Please check that Antrea components are running normally.
+
+- !Message
+  key: failed_to_parse_network_policy_evaluation
+  type:
+    - result
+  message: |
+    Failed to parse NetworkPolicyEvaluation result for traffic queried. Unknown result {0}.
+
+- !Message
+  key: network_policy_evaluation_failed
+  type:
+    - step
+  message: |
+    Failed to parse NetworkPolicyEvaluation result for traffic queried.
+
+- !Message
+  key: check_antrea_controller_logs
+  type:
+    - rcmd
+  message: |
+    Please check that Antrea controller logs for more information regarding the failure.
+
+- !Message
+  key: network_policy_evaluation_success
+  type:
+    - step
+  message: |
+    Successfully parsed NetworkPolicyEvaluation result for traffic queried: {0}
+    
+- !Message
+  key: failed_to_parse_traceflow
+  type:
+    - result
+  message: |
+    Failed to parse Traceflow result for traffic queried. Unknown result: {0}
+
+- !Message
+  key: traffic_match_expectation
+  type:
+    - result
+  message: |
+    Traceflow results agree with Antrea NetworkPolicyEvaluation results. No issue found.
+
+- !Message
+  key: traffic_does_not_match_expectation
+  type:
+    - result
+  message: |
+    Traceflow results do not agree with Antrea NetworkPolicyEvaluation results.
+    Expected action on traffic is {0}, while observed behavior is {1}.
+
+- !Message
+  key: check_ovs_datapath_rules
+  type:
+    - rcmd
+  message: |
+    Please check OpenFlow rules in Antrea agent.
+
+- !Message
+  key: traceflow_success
+  type:
+    - step
+  message: |
+    Successfully parsed Traceflow result for traffic queried: {0}
+
+- !Message
+  key: traceflow_failed
+  type:
+    - step
+  message: |
+    Failed to parse Traceflow result for traffic queried. Unknown result: {0}

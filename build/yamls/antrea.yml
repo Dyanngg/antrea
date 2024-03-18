@@ -7143,8 +7143,7 @@ spec:
           resources:
             requests:
               cpu: 200m
-          command: [ "sleep" ]
-          args: [ "3600" ]
+          command: [ "/opt/vmware/sha/bin/sha" ]
       volumes:
         - name: antrea-config
           configMap:

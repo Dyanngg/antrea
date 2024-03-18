@@ -1,0 +1,46 @@
+- !Runbook
+  id: AntreaPodConnectivity
+  description: Runbook to debug Pod to Pod connectivity issues when Antrea is running as CNI.
+  author: VMware, Inc.
+  major_version: 1
+  minor_version: 0
+  enabled: true
+  timeout:
+    default: 120
+    minimum: 90
+    maximum: 300
+  throttle_cycle:
+    default: 5
+    minimum: 2
+    maximum: 10
+  throttle_value:
+    default: 5
+    minimum: 1
+    maximum: 10
+  targets: ["any"]
+  entry: CheckNPEvaluation
+  arguments:
+    - name: src-pod
+      title: Source pod of traffic to be tested
+      arg_type: string
+    - name: dst-pod
+      title: Destination pod of traffic to be tested
+      arg_type: string
+
+- !Step
+  id: CheckNPEvaluation
+  description: Run Antrea NetworkPolicyEvaluation command for the traffic to be tested
+  providers:
+    - type: local_python
+      module: runbook.antrea_pod_connectivity
+      class_name: AntreaNPEvaluationProvider
+      targets: ["any"]
+
+- !Step
+  id: CheckTraceflowResult
+  description: Run Traceflow for the traffic to be tested
+  providers:
+    - type: local_python
+      module: runbook.antrea_pod_connectivity
+      class_name: AntreaTraceflowProvider
+      targets: [ "any" ]
