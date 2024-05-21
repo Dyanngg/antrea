@@ -1,0 +1,40 @@
+FROM nsx-ujo-docker-local.artifactory.eng.vmware.com/interworking/debian:bullseye-slim
+
+LABEL maintainer="Antrea <projectantrea-dev@googlegroups.com>"
+LABEL description="The Docker image to run SHA agent for ODS runbook."
+
+USER root
+
+COPY build/yamls/ods/cert/* /cert/
+COPY build/yamls/ods/deployment_info.yml /etc/sha/
+
+RUN apt-get update && \
+    apt-get install -y wget procps jq xz-utils build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libsqlite3-dev libreadline-dev libffi-dev curl libbz2-dev && \
+    wget https://www.python.org/ftp/python/3.8.1/Python-3.8.1.tar.xz && \
+    tar -xf Python-3.8.1.tar.xz && \
+    cd Python-3.8.1 && \
+    ./configure --enable-optimizations && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -f Python-3.8.1.tar.xz Python-3.8.1 && \
+    apt-get remove zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libsqlite3-dev libreadline-dev libffi-dev
+
+RUN wget https://build-artifactory.eng.vmware.com/artifactory/nsbu-files-local/nsx-publishers/python/sha-agent/4.1.2.0.0.22083080/sha_4.1.2.0.0.22083080_amd64.deb -O sha-agent.deb && \
+    dpkg -i sha-agent.deb && \
+    rm -f sha-agent.deb && \
+    sed -i 's/dist-packages/site-packages/g' /opt/vmware/sha/bin/sha && \
+    rm /opt/vmware/sha/lib/python/sha/runbooks/*
+
+COPY ods/runbooks/* /opt/vmware/sha/lib/python/sha/runbooks
+COPY ods/message/* /opt/vmware/sha/lib/python/sha/contrib/runbook/message
+COPY ods/k8s_client_patch.py /opt/vmware/sha/lib/python/sha/contrib/runbook/utils_northstar
+RUN  cat /opt/vmware/sha/lib/python/sha/contrib/runbook/message/antrea_msg.py >> /opt/vmware/sha/lib/python/sha/contrib/runbook/message/msg.py && \
+     rm /opt/vmware/sha/lib/python/sha/contrib/runbook/message/antrea_msg.py && \
+     cat /opt/vmware/sha/lib/python/sha/contrib/runbook/message/antrea_key.py >> /opt/vmware/sha/lib/python/sha/contrib/runbook/message/key.py && \
+     rm /opt/vmware/sha/lib/python/sha/contrib/runbook/message/antrea_key.py && \
+     cat /opt/vmware/sha/lib/python/sha/contrib/runbook/utils_northstar/k8s_client_patch.py >> /opt/vmware/sha/lib/python/sha/contrib/runbook/utils_northstar/k8s_client.py && \
+     rm /opt/vmware/sha/lib/python/sha/contrib/runbook/utils_northstar/k8s_client_patch.py && \
+     sed -i '$d' /opt/vmware/sha/bin/sha && \
+     echo "wait $!" >> /opt/vmware/sha/bin/sha
+COPY ods/__init__.py /opt/vmware/sha/lib/python/sha/contrib/runbook/utils_northstar

@@ -140,13 +140,6 @@ spec:
               mountPath: /var/run/antrea/antrea-controller-tls
             - name: host-var-log-antrea
               mountPath: /var/log/antrea
-        - name: antrea-ods
-          image: "antrea/antrea-ods:latest"
-          imagePullPolicy: IfNotPresent
-          resources:
-            requests:
-              cpu: 200m
-          command: [ "/opt/vmware/sha/bin/sha" ]
       volumes:
         - name: antrea-config
           configMap:
@@ -161,3 +154,59 @@ spec:
           hostPath:
             path: /var/log/antrea
             type: DirectoryOrCreate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: antrea-ods
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: antrea
+    component: antrea-ods
+spec:
+  selector:
+    matchLabels:
+      app: antrea
+      component: antrea-ods
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: antrea
+        component: antrea-ods
+    spec:
+      {{- with .Values.controller.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      hostNetwork: true
+      priorityClassName: {{ .Values.controller.priorityClassName }}
+      {{- with .Values.controller.tolerations }}
+      tolerations:
+        {{- toYaml . | trim | nindent 8 }}
+      {{- end }}
+      {{- if .Values.testing.simulator.enable }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: antrea/instance
+                    operator: NotIn
+                    values:
+                      - simulator
+      {{- else }}
+      {{- with .Values.controller.affinity }}
+      affinity:
+        {{- toYaml . | trim | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      serviceAccountName: antrea-controller
+      containers:
+        - name: antrea-ods
+          image: "antrea/antrea-ods:latest"
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 200m
+          command: [ "/opt/vmware/sha/bin/sha" ]

@@ -7139,13 +7139,6 @@ spec:
               mountPath: /var/run/antrea/antrea-controller-tls
             - name: host-var-log-antrea
               mountPath: /var/log/antrea
-        - name: antrea-ods
-          image: "antrea/antrea-ods:latest"
-          imagePullPolicy: IfNotPresent
-          resources:
-            requests:
-              cpu: 200m
-          command: [ "/opt/vmware/sha/bin/sha" ]
       volumes:
         - name: antrea-config
           configMap:
@@ -7160,6 +7153,52 @@ spec:
           hostPath:
             path: /var/log/antrea
             type: DirectoryOrCreate
+---
+# Source: antrea/templates/controller/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: antrea-ods
+  namespace: kube-system
+  labels:
+    app: antrea
+    component: antrea-ods
+spec:
+  selector:
+    matchLabels:
+      app: antrea
+      component: antrea-ods
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: antrea
+        component: antrea-ods
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      hostNetwork: true
+      priorityClassName: system-cluster-critical
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+        - effect: NoExecute
+          key: node.kubernetes.io/unreachable
+          operator: Exists
+          tolerationSeconds: 0
+      serviceAccountName: antrea-controller
+      containers:
+        - name: antrea-ods
+          image: "antrea/antrea-ods:latest"
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 200m
+          command: [ "/opt/vmware/sha/bin/sha" ]
 ---
 # Source: antrea/templates/controller/apiservices.yaml
 apiVersion: apiregistration.k8s.io/v1
