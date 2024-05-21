@@ -1899,7 +1899,7 @@ func TestProcessClusterNetworkPolicy(t *testing.T) {
 			c.namespaceStore.Add(&nsC)
 			c.serviceStore.Add(&svcA)
 			c.tierStore.Add(&tierA)
-			actualPolicy, actualAppliedToGroups, actualAddressGroups := c.processClusterNetworkPolicy(tt.inputPolicy)
+			actualPolicy, actualAppliedToGroups, actualAddressGroups := c.processAntreaClusterNetworkPolicy(tt.inputPolicy)
 			assert.Equal(t, tt.expectedPolicy.UID, actualPolicy.UID)
 			assert.Equal(t, tt.expectedPolicy.Name, actualPolicy.Name)
 			assert.Equal(t, tt.expectedPolicy.SourceRef, actualPolicy.SourceRef)
@@ -1917,7 +1917,7 @@ func TestProcessClusterNetworkPolicy(t *testing.T) {
 func TestAddACNP(t *testing.T) {
 	_, npc := newController(nil, nil)
 	cnp := getACNP()
-	npc.addCNP(cnp)
+	npc.addACNP(cnp)
 	require.Equal(t, 1, npc.internalNetworkPolicyQueue.Len())
 	key, done := npc.internalNetworkPolicyQueue.Get()
 	expectedKey := getACNPReference(cnp)
@@ -1931,7 +1931,7 @@ func TestUpdateACNP(t *testing.T) {
 	newCNP := cnp.DeepCopy()
 	// Make a change to the CNP.
 	newCNP.Annotations = map[string]string{"foo": "bar"}
-	npc.updateCNP(cnp, newCNP)
+	npc.updateACNP(cnp, newCNP)
 	require.Equal(t, 1, npc.internalNetworkPolicyQueue.Len())
 	key, done := npc.internalNetworkPolicyQueue.Get()
 	expectedKey := getACNPReference(cnp)
@@ -1942,7 +1942,7 @@ func TestUpdateACNP(t *testing.T) {
 func TestDeleteACNP(t *testing.T) {
 	_, npc := newController(nil, nil)
 	cnp := getACNP()
-	npc.deleteCNP(cnp)
+	npc.deleteACNP(cnp)
 	require.Equal(t, 1, npc.internalNetworkPolicyQueue.Len())
 	key, done := npc.internalNetworkPolicyQueue.Get()
 	expectedKey := getACNPReference(cnp)
