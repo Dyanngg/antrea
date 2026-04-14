@@ -1,0 +1,99 @@
+# Extends hack/kind-flow-demo-workloads.yaml: ACNP that drops egress only from
+# the restricted client (type=production) to flow-demo-a server. The other client
+# in flow-demo-c is unaffected and keeps reaching agnhost-server.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flow-demo-c
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agnhost-client-restricted
+  namespace: flow-demo-c
+  labels:
+    app: agnhost-client-restricted
+    type: "production"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agnhost-client-restricted
+  template:
+    metadata:
+      labels:
+        app: agnhost-client-restricted
+        type: "production"
+    spec:
+      containers:
+        - name: client
+          image: registry.k8s.io/e2e-test-images/agnhost:2.45
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              URL="http://agnhost-server.flow-demo-a.svc.cluster.local:8080/"
+              echo "restricted client: HTTP GET every 5s -> $URL (dropped by ACNP for this Pod label)"
+              while true; do
+                wget -qO- --timeout=5 "$URL" >/dev/null 2>&1 || true
+                sleep 5
+              done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agnhost-client-dev
+  namespace: flow-demo-c
+  labels:
+    app: agnhost-client-dev
+    type: "dev"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agnhost-client-dev
+  template:
+    metadata:
+      labels:
+        app: agnhost-client-dev
+        type: "dev"
+    spec:
+      containers:
+        - name: client
+          image: registry.k8s.io/e2e-test-images/agnhost:2.45
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              URL="http://agnhost-server.flow-demo-a.svc.cluster.local:8080/"
+              echo "open client: waiting for server..."
+              until wget -qO- --timeout=5 "$URL" >/dev/null 2>&1; do sleep 1; done
+              echo "open client: HTTP GET every 5s -> $URL (not targeted by ACNP)"
+              while true; do
+                wget -qO- "$URL" >/dev/null
+                sleep 5
+              done
+---
+apiVersion: crd.antrea.io/v1beta1
+kind: ClusterNetworkPolicy
+metadata:
+  name: drop-flow-demo-c-to-flow-demo-a
+spec:
+  priority: 100
+  tier: application
+  appliedTo:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: flow-demo-c
+      podSelector:
+        matchLabels:
+          app: agnhost-client-restricted
+  egress:
+    - action: Drop
+      name: drop-to-flow-demo-a
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: flow-demo-a

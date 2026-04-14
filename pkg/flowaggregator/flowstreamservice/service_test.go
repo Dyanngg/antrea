@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/netip"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -53,9 +54,7 @@ func (f *fakeStream) SendMsg(any) error            { return nil }
 func (f *fakeStream) RecvMsg(any) error            { return nil }
 
 func newTestService(buf ringbuffer.BroadcastBuffer[*flowpb.Flow]) *FlowStreamService {
-	svc := NewFlowStreamService(buf)
-	svc.consumerDeadline = 5 * time.Millisecond
-	return svc
+	return NewFlowStreamService(buf)
 }
 
 func collectFlows(responses []*flowpb.GetFlowsResponse) []*flowpb.Flow {
@@ -94,24 +93,36 @@ func newPodK8S(srcNS, srcName, dstNS, dstName string) *flowpb.Kubernetes {
 	}
 }
 
-func TestDestinationServiceName(t *testing.T) {
+func TestDestinationServiceFilterKey(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
 	}{
 		{input: "", want: ""},
-		{input: "default/frontend", want: "frontend"},
-		{input: "default/frontend:http", want: "frontend"},
-		{input: "production/api-gateway:grpc", want: "api-gateway"},
-		{input: "ns/svc:", want: "svc"},
-		{input: "bareword", want: ""},
-		{input: "a/b:c:d", want: "b"},
+		{input: "default/frontend:http", want: "default/frontend"},
+		{input: "  default/frontend:http  ", want: "default/frontend"},
+		{input: "default/frontend", want: "default/frontend"},
+		{input: "agnhost-server:http", want: ""}, // No namespace, should return empty
+		{input: "flow-aggregator/flow-aggregator:grpc", want: "flow-aggregator/flow-aggregator"},
+		{input: "/frontend:http", want: ""}, // Empty namespace, should return empty
+		{input: "frontend", want: ""},       // No namespace, should return empty
 	}
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%q", tc.input), func(t *testing.T) {
-			assert.Equal(t, tc.want, destinationServiceName(tc.input))
+			assert.Equal(t, tc.want, destinationServiceFilterKey(tc.input))
 		})
 	}
+}
+
+func TestServiceFilterMatches(t *testing.T) {
+	assert.True(t, serviceFilterMatches("default/frontend:http", "default/frontend"))
+	assert.True(t, serviceFilterMatches("default/frontend:http", "default/frontend:http"))
+	assert.False(t, serviceFilterMatches("production/frontend:http", "default/frontend"))
+	assert.False(t, serviceFilterMatches("default/backend:http", "default/frontend"))
+
+	// Test cases where service has no namespace (should not match anything)
+	assert.False(t, serviceFilterMatches("frontend:http", "default/frontend"))
+	assert.False(t, serviceFilterMatches("frontend", "default/frontend"))
 }
 
 func TestApplyFilter_Since(t *testing.T) {
@@ -294,45 +305,57 @@ func TestMatchFilter_ServiceNames(t *testing.T) {
 		wantMatch   bool
 	}{
 		{
-			name:        "plain name matches namespace/name:port",
+			name:        "namespace/service filter matches and is namespace-specific",
 			svcPortName: "default/frontend:http",
-			filter:      []string{"frontend"},
+			filter:      []string{"default/frontend"},
 			wantMatch:   true,
 		},
 		{
-			name:        "same name in different namespace still matches",
+			name:        "namespace/service filter does not match other namespace",
 			svcPortName: "production/frontend:http",
+			filter:      []string{"default/frontend"},
+			wantMatch:   false,
+		},
+		{
+			name:        "bare service name does not match (namespace required in filter)",
+			svcPortName: "default/frontend:http",
 			filter:      []string{"frontend"},
-			wantMatch:   true,
+			wantMatch:   false,
 		},
 		{
 			name:        "different service name does not match",
 			svcPortName: "default/backend:http",
-			filter:      []string{"frontend"},
+			filter:      []string{"default/frontend"},
 			wantMatch:   false,
 		},
 		{
 			name:        "partial prefix of name does not match (no HasPrefix bug)",
 			svcPortName: "default/frontendXYZ:http",
-			filter:      []string{"frontend"},
+			filter:      []string{"default/frontend"},
 			wantMatch:   false,
 		},
 		{
 			name:        "empty DestinationServicePortName does not match",
 			svcPortName: "",
-			filter:      []string{"frontend"},
+			filter:      []string{"default/frontend"},
 			wantMatch:   false,
 		},
 		{
 			name:        "multiple entries in filter: one matches",
 			svcPortName: "default/backend:http",
-			filter:      []string{"frontend", "backend"},
+			filter:      []string{"default/frontend", "default/backend"},
 			wantMatch:   true,
 		},
 		{
 			name:        "no port suffix (namespace/name only) still matches",
 			svcPortName: "default/frontend",
-			filter:      []string{"frontend"},
+			filter:      []string{"default/frontend"},
+			wantMatch:   true,
+		},
+		{
+			name:        "filter may use kube-proxy string; port stripped to match",
+			svcPortName: "default/frontend:http",
+			filter:      []string{"default/frontend:http"},
 			wantMatch:   true,
 		},
 	}
@@ -503,7 +526,6 @@ func TestMatchFilter_LabelSelector(t *testing.T) {
 
 func TestGetFlows_ReceivesAllFlows(t *testing.T) {
 	buf := ringbuffer.NewBroadcastBuffer[*flowpb.Flow](64)
-	t.Cleanup(func() { buf.Shutdown() })
 
 	const n = 5
 	wantIDs := make([]string, n)
@@ -512,6 +534,8 @@ func TestGetFlows_ReceivesAllFlows(t *testing.T) {
 		wantIDs[i] = id
 		buf.Produce(newFlow(id, &flowpb.Kubernetes{}))
 	}
+	// Shutdown signals end-of-stream so GetFlows(follow=false) can drain and return.
+	buf.Shutdown()
 
 	svc := newTestService(buf)
 	stream := newFakeStream(context.Background())
@@ -547,7 +571,6 @@ func TestGetFlows_MaxCount(t *testing.T) {
 
 func TestGetFlows_FilterByServiceName(t *testing.T) {
 	buf := ringbuffer.NewBroadcastBuffer[*flowpb.Flow](64)
-	t.Cleanup(func() { buf.Shutdown() })
 
 	for i := range 3 {
 		buf.Produce(newFlow(fmt.Sprintf("fe-%d", i), &flowpb.Kubernetes{
@@ -557,12 +580,13 @@ func TestGetFlows_FilterByServiceName(t *testing.T) {
 			DestinationServicePortName: "default/backend:http",
 		}))
 	}
+	buf.Shutdown()
 
 	svc := newTestService(buf)
 	stream := newFakeStream(context.Background())
 	req := &flowpb.GetFlowsRequest{
 		Follow: false,
-		Filter: &flowpb.FlowFilter{ServiceNames: []string{"frontend"}},
+		Filter: &flowpb.FlowFilter{ServiceNames: []string{"default/frontend"}},
 	}
 	require.NoError(t, svc.GetFlows(req, stream))
 
@@ -575,7 +599,6 @@ func TestGetFlows_FilterByServiceName(t *testing.T) {
 
 func TestGetFlows_FilterByNamespace(t *testing.T) {
 	buf := ringbuffer.NewBroadcastBuffer[*flowpb.Flow](64)
-	t.Cleanup(func() { buf.Shutdown() })
 
 	for i := range 4 {
 		buf.Produce(newFlow(fmt.Sprintf("def-%d", i), newPodK8S("default", "pod", "other", "pod")))
@@ -583,6 +606,7 @@ func TestGetFlows_FilterByNamespace(t *testing.T) {
 	for i := range 2 {
 		buf.Produce(newFlow(fmt.Sprintf("mon-%d", i), newPodK8S("monitoring", "pod", "other", "pod")))
 	}
+	buf.Shutdown()
 
 	svc := newTestService(buf)
 	stream := newFakeStream(context.Background())
@@ -602,9 +626,42 @@ func TestGetFlows_FilterByNamespace(t *testing.T) {
 	}
 }
 
+// TestGetFlows_FilterCombinedNamespacesAndPodNames verifies AND semantics across
+// filter fields: a flow must satisfy namespaces (per direction) and pod_names
+// together. Values inside each repeated field are OR-ed (see FlowFilter comment
+// in service.proto).
+func TestGetFlows_FilterCombinedNamespacesAndPodNames(t *testing.T) {
+	buf := ringbuffer.NewBroadcastBuffer[*flowpb.Flow](64)
+
+	// Matches: namespace default on source, pod name app on source.
+	buf.Produce(newFlow("match-src", newPodK8S("default", "app", "kube-system", "db")))
+	// Matches: namespace default on destination, pod name app on destination.
+	buf.Produce(newFlow("match-dst", newPodK8S("kube-system", "x", "default", "app")))
+	// Namespace matches but pod name does not.
+	buf.Produce(newFlow("wrong-pod", newPodK8S("default", "nginx", "default", "nginx")))
+	// Pod name matches but neither side is in default namespace.
+	buf.Produce(newFlow("wrong-ns", newPodK8S("kube-system", "app", "kube-system", "app")))
+	buf.Shutdown()
+
+	svc := newTestService(buf)
+	stream := newFakeStream(context.Background())
+	req := &flowpb.GetFlowsRequest{
+		Follow: false,
+		Filter: &flowpb.FlowFilter{
+			Namespaces: []string{"default"},
+			PodNames:   []string{"app"},
+		},
+	}
+	require.NoError(t, svc.GetFlows(req, stream))
+
+	got := collectFlows(stream.responses)
+	require.Len(t, got, 2)
+	gotIDs := []string{got[0].GetId(), got[1].GetId()}
+	assert.ElementsMatch(t, []string{"match-src", "match-dst"}, gotIDs)
+}
+
 func TestGetFlows_SinceFilter(t *testing.T) {
 	buf := ringbuffer.NewBroadcastBuffer[*flowpb.Flow](64)
-	t.Cleanup(func() { buf.Shutdown() })
 
 	now := time.Now()
 	since := now.Add(-30 * time.Second)
@@ -613,6 +670,7 @@ func TestGetFlows_SinceFilter(t *testing.T) {
 	buf.Produce(newFlowEndTs("old-2", now.Add(-45*time.Second), &flowpb.Kubernetes{}))
 	buf.Produce(newFlowEndTs("recent-1", now.Add(-10*time.Second), &flowpb.Kubernetes{}))
 	buf.Produce(newFlowEndTs("recent-2", now.Add(-1*time.Second), &flowpb.Kubernetes{}))
+	buf.Shutdown()
 
 	svc := newTestService(buf)
 	stream := newFakeStream(context.Background())
@@ -647,25 +705,30 @@ func TestGetFlows_InvalidLabelSelector(t *testing.T) {
 }
 
 func TestGetFlows_FollowContextCancelled(t *testing.T) {
-	buf := ringbuffer.NewBroadcastBuffer[*flowpb.Flow](64)
-	t.Cleanup(func() { buf.Shutdown() })
+	synctest.Test(t, func(t *testing.T) {
+		buf := ringbuffer.NewBroadcastBuffer[*flowpb.Flow](64)
+		t.Cleanup(func() { buf.Shutdown() })
 
-	ctx, cancel := context.WithCancel(context.Background())
-	svc := newTestService(buf)
-	stream := newFakeStream(ctx)
+		ctx, cancel := context.WithCancel(t.Context())
+		svc := newTestService(buf)
+		stream := newFakeStream(ctx)
 
-	errCh := make(chan error, 1)
-	go func() { errCh <- svc.GetFlows(&flowpb.GetFlowsRequest{Follow: true}, stream) }()
+		errCh := make(chan error, 1)
+		go func() { errCh <- svc.GetFlows(&flowpb.GetFlowsRequest{Follow: true}, stream) }()
 
-	time.Sleep(20 * time.Millisecond)
-	cancel()
+		// Wait until GetFlows is blocked in the consumer (e.g. ConsumeMultiple).
+		synctest.Wait()
+		cancel()
+		// Wait until GetFlows observes cancellation and returns.
+		synctest.Wait()
 
-	select {
-	case err := <-errCh:
-		st, ok := status.FromError(err)
-		require.True(t, ok)
-		assert.Equal(t, codes.Canceled, st.Code())
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("GetFlows did not return after context cancellation")
-	}
+		select {
+		case err := <-errCh:
+			st, ok := status.FromError(err)
+			require.True(t, ok)
+			assert.Equal(t, codes.Canceled, st.Code())
+		case <-time.After(2 * time.Second):
+			t.Fatal("GetFlows did not return after context cancellation")
+		}
+	})
 }

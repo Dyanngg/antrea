@@ -33,8 +33,12 @@ import (
 )
 
 const (
-	internalBatchSize       = 100
-	defaultConsumerDeadline = 500 * time.Millisecond
+	internalBatchSize = 100
+	// contextCheckInterval caps how long ConsumeMultiple blocks before returning
+	// with n=0 so that the GetFlows loop can check ctx.Err() and exit promptly
+	// when the client disconnects. This does not add latency to flow delivery —
+	// ConsumeMultiple returns immediately when flows are available.
+	contextCheckInterval = 100 * time.Millisecond
 )
 
 // FlowStreamService implements flowpb.FlowStreamServiceServer. Each client
@@ -42,13 +46,12 @@ const (
 // fully decoupled and a slow client never stalls faster ones.
 type FlowStreamService struct {
 	flowpb.UnimplementedFlowStreamServiceServer
-	buffer           ringbuffer.BroadcastBuffer[*flowpb.Flow]
-	consumerDeadline time.Duration
+	buffer ringbuffer.BroadcastBuffer[*flowpb.Flow]
 }
 
 // NewFlowStreamService creates a FlowStreamService backed by the given buffer.
 func NewFlowStreamService(buffer ringbuffer.BroadcastBuffer[*flowpb.Flow]) *FlowStreamService {
-	return &FlowStreamService{buffer: buffer, consumerDeadline: defaultConsumerDeadline}
+	return &FlowStreamService{buffer: buffer}
 }
 
 // GetFlows is the server-streaming RPC handler. The gRPC framework spawns a
@@ -84,7 +87,7 @@ func (s *FlowStreamService) GetFlows(req *flowpb.GetFlowsRequest, stream flowpb.
 
 	consumer := s.buffer.NewConsumer(
 		ringbuffer.WithReadFromBeginning(),
-		ringbuffer.WithMaxConsumeDeadline(s.consumerDeadline),
+		ringbuffer.WithMaxConsumeDeadline(contextCheckInterval),
 	)
 
 	sent := 0
@@ -100,10 +103,7 @@ func (s *FlowStreamService) GetFlows(req *flowpb.GetFlowsRequest, stream flowpb.
 		n, dropped, shutdown := consumer.ConsumeMultiple(batch)
 		totalDropped += dropped
 
-		if shutdown {
-			klog.V(4).InfoS("Ring buffer shut down, closing GetFlows stream")
-			return nil
-		} else if n > 0 {
+		if n > 0 {
 			filtered := applyFilter(batch[:n], req.GetFilter(), labelSel, since)
 
 			if maxCount > 0 && sent+len(filtered) >= maxCount {
@@ -126,6 +126,11 @@ func (s *FlowStreamService) GetFlows(req *flowpb.GetFlowsRequest, stream flowpb.
 				klog.V(4).InfoS("Reached max_count, closing GetFlows stream", "sent", sent)
 				return nil
 			}
+		}
+
+		if shutdown {
+			klog.V(4).InfoS("Ring buffer shut down, closing GetFlows stream")
+			return nil
 		}
 
 		if !follow && n == 0 {
@@ -177,8 +182,10 @@ func matchFilter(f *flowpb.Flow, filter *flowpb.FlowFilter, labelSel labels.Sele
 		if k8s == nil {
 			return false
 		}
-		svcName := destinationServiceName(k8s.GetDestinationServicePortName())
-		if !slices.Contains(filter.GetServiceNames(), svcName) {
+		svcName := k8s.GetDestinationServicePortName()
+		if !slices.ContainsFunc(filter.GetServiceNames(), func(input string) bool {
+			return serviceFilterMatches(svcName, input)
+		}) {
 			return false
 		}
 	}
@@ -310,18 +317,37 @@ func containsFlowType(types []flowpb.FlowType, t flowpb.FlowType) bool {
 	return false
 }
 
-// destinationServiceName extracts the bare service name from a
-// DestinationServicePortName value. That field is set by the flow exporter from
-// proxy.ServicePortName.String(), which produces "namespace/name:portName" (or
-// "namespace/name" when the port has no named port).
-func destinationServiceName(s string) string {
-	slash := strings.Index(s, "/")
-	if slash < 0 {
+// destinationServiceFilterKey returns the namespace/service identity with any
+// trailing ":port" or ":portName" removed from kube-proxy ServicePortName
+// formatting ("namespace/name:port").
+func destinationServiceFilterKey(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
 		return ""
 	}
-	s = s[slash+1:]
-	if colon := strings.Index(s, ":"); colon >= 0 {
-		s = s[:colon]
+	// Only handle valid namespace/service format
+	i := strings.Index(s, "/")
+	if i <= 0 {
+		return ""
+	}
+	if j := strings.Index(s[i:], ":"); j >= 0 {
+		return s[:i+j]
 	}
 	return s
+}
+
+// serviceFilterMatches reports whether filterToken selects the flow's destination
+// service. Both flowDestinationServicePortName and filterToken are expected to be
+// in namespace/service format (with optional port suffix that gets stripped).
+func serviceFilterMatches(flowDestinationServicePortName, filterToken string) bool {
+	flowKey := destinationServiceFilterKey(flowDestinationServicePortName)
+	if flowKey == "" {
+		return false
+	}
+	want := strings.TrimSpace(filterToken)
+	if want == "" {
+		return false
+	}
+	wantKey := destinationServiceFilterKey(want)
+	return wantKey == flowKey
 }
